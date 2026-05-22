@@ -1,0 +1,32 @@
+{
+  "host": "0.0.0.0",
+  "port": 8787,
+  "apiKey": "change-me",
+  "runtimeDir": "./runtime",
+  "ldplayer": {
+    "ldconsolePath": "",
+    "adbPath": "",
+    "profilePrefix": "redeem-",
+    "serialByProfile": {},
+    "bootTimeoutMs": 120000
+  },
+  "appium": {
+    "url": "http://127.0.0.1:4723",
+    "commandTimeoutMs": 120000
+  },
+  "apks": {
+    "bing": "./apks/bing.apk",
+    "v2rayng": "./apks/v2rayng.apk",
+    "appiumSettings": "./apks/appium-settings.apk"
+  },
+  "packages": {
+    "bing": "com.microsoft.bing",
+    "v2rayng": "com.v2ray.ang",
+    "appiumSettings": "io.appium.settings"
+  },
+  "queue": {
+    "taskTimeoutMs": 600000,
+    "manualTimeoutMs": 600000,
+    "codeTimeoutMs": 300000
+  }
+}

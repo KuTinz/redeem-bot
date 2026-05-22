@@ -1,0 +1,96 @@
+import { fileExists } from './config.js'
+import { asErrorMessage, runCommand, sleep } from './util.js'
+import { StepLogger } from './types.js'
+
+export class AdbClient {
+    readonly executable: string
+
+    constructor(executable = 'adb') {
+        this.executable = executable || 'adb'
+    }
+
+    async run(serial: string | null, args: string[], allowFailure = false) {
+        const serialArgs = serial ? ['-s', serial, ...args] : args
+        return await runCommand(this.executable, serialArgs, {
+            allowFailure,
+            timeoutMs: 120000,
+        })
+    }
+
+    async devices(): Promise<string[]> {
+        const result = await this.run(null, ['devices'], false)
+        return result.stdout
+            .split(/\r?\n/)
+            .slice(1)
+            .map(line => line.trim().split(/\s+/))
+            .filter(parts => parts[0] && parts[1] === 'device')
+            .map(parts => parts[0])
+    }
+
+    async connect(hostAndPort: string): Promise<void> {
+        await this.run(null, ['connect', hostAndPort], true)
+    }
+
+    async waitForBoot(serial: string, timeoutMs: number, log: StepLogger): Promise<void> {
+        const start = Date.now()
+        await this.run(serial, ['wait-for-device'], false)
+        while (Date.now() - start < timeoutMs) {
+            const result = await this.run(serial, ['shell', 'getprop', 'sys.boot_completed'], true)
+            if (result.stdout.trim() === '1') {
+                log('success', `ADB device ${serial} booted`)
+                return
+            }
+            await sleep(2000)
+        }
+        throw new Error(`ADB device ${serial} did not report boot complete within ${timeoutMs}ms`)
+    }
+
+    async isPackageInstalled(serial: string, packageName: string): Promise<boolean> {
+        const result = await this.run(serial, ['shell', 'pm', 'list', 'packages', packageName], true)
+        return result.stdout.split(/\r?\n/).some(line => line.trim() === `package:${packageName}`)
+    }
+
+    async installIfMissing(
+        serial: string,
+        packageName: string,
+        apkPath: string,
+        label: string,
+        log: StepLogger,
+        optional = false,
+    ): Promise<void> {
+        if (await this.isPackageInstalled(serial, packageName)) {
+            log('success', `${label} already installed`)
+            return
+        }
+        if (!(await fileExists(apkPath))) {
+            if (optional) {
+                log('processing', `${label} APK not found at ${apkPath}; skipping optional install`)
+                return
+            }
+            throw new Error(`${label} APK missing at ${apkPath}`)
+        }
+        log('processing', `Installing ${label} from ${apkPath}`)
+        const result = await this.run(serial, ['install', '-r', apkPath], true)
+        if (result.code !== 0 || !/Success/i.test(`${result.stdout}\n${result.stderr}`)) {
+            throw new Error(`Failed to install ${label}: ${result.stderr || result.stdout}`)
+        }
+        log('success', `${label} installed`)
+    }
+
+    async push(serial: string, source: string, destination: string): Promise<void> {
+        await this.run(serial, ['push', source, destination], false)
+    }
+
+    async openUrl(serial: string, url: string): Promise<void> {
+        await this.run(serial, ['shell', 'am', 'start', '-a', 'android.intent.action.VIEW', '-d', url], false)
+    }
+
+    async startPackage(serial: string, packageName: string): Promise<void> {
+        const result = await this.run(
+            serial,
+            ['shell', 'monkey', '-p', packageName, '-c', 'android.intent.category.LAUNCHER', '1'],
+            true,
+        )
+        if (result.code !== 0) throw new Error(`Could not start ${packageName}: ${asErrorMessage(result.stderr || result.stdout)}`)
+    }
+}

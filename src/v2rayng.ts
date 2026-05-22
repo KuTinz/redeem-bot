@@ -1,10 +1,10 @@
-import { mkdir, writeFile } from 'node:fs/promises'
-import path from 'node:path'
 import { AdbClient } from './adb.js'
 import { AppiumDriver } from './appium.js'
 import { RedeemServerConfig } from './config.js'
 import { ProxyPayload, StepLogger } from './types.js'
 import { sleep } from './util.js'
+
+type ManualProtocol = 'HTTP' | 'SOCKS'
 
 export class V2rayNgManager {
     private readonly config: RedeemServerConfig
@@ -23,62 +23,110 @@ export class V2rayNgManager {
         log: StepLogger,
     ): Promise<void> {
         if (!proxy?.host || !proxy.port) throw new Error('Redeem task has no proxy host or port')
-        const jsonPath = await this.writeConfig(profileName, proxy)
-        const remotePath = `/sdcard/Download/${path.basename(jsonPath)}`
-        await this.adb.push(serial, jsonPath, remotePath)
-        await this.adb.chmod(serial, remotePath, '644')
-        await this.adb.scanFile(serial, remotePath)
-        if (!(await this.adb.fileExists(serial, remotePath))) {
-            throw new Error(`Proxy custom config was pushed but is not visible at ${remotePath}`)
-        }
-        log('success', `Proxy custom config pushed to ${remotePath}`)
 
         await this.adb.startPackage(serial, this.config.packages.v2rayng)
         await sleep(2000)
-        const imported = await this.tryImportLocalConfig(driver, path.basename(remotePath), log)
-        if (!imported) {
-            throw new Error(`v2rayNG UI import did not finish. Import ${remotePath} from Custom config in v2rayNG, connect it, then Resume.`)
+
+        const added = await this.tryAddManualProxy(profileName, proxy, driver, log)
+        if (!added) {
+            throw new Error('v2rayNG manual proxy add did not finish. Add the HTTP/SOCKS proxy in v2rayNG, connect it, then Resume.')
         }
+
         const connected = await this.tryConnect(driver, log)
         if (!connected) {
-            throw new Error('v2rayNG config was imported but connect button was not detected. Connect it in LDPlayer, then Resume.')
+            throw new Error('v2rayNG config was added but VPN start was not detected. Connect it in LDPlayer, then Resume.')
         }
         await this.acceptVpnPrompt(driver)
         log('success', 'v2rayNG connect action sent')
     }
 
-    private async writeConfig(profileName: string, proxy: ProxyPayload): Promise<string> {
-        const safeFile = profileName.replace(/[^a-z0-9_-]+/gi, '-')
-        const folder = path.join(this.config.runtimeDir, 'proxy-configs')
-        await mkdir(folder, { recursive: true })
-        const filePath = path.join(folder, `${safeFile}.json`)
-        await writeFile(filePath, JSON.stringify(v2rayConfig(proxy), null, 2), 'utf8')
-        return filePath
-    }
+    private async tryAddManualProxy(
+        profileName: string,
+        proxy: ProxyPayload,
+        driver: AppiumDriver,
+        log: StepLogger,
+    ): Promise<boolean> {
+        const protocol = manualProtocol(proxy)
+        const remarks = `redeem-${proxy.host}-${proxy.port}`
+        const source = await driver.source()
 
-    private async tryImportLocalConfig(driver: AppiumDriver, fileName: string, log: StepLogger): Promise<boolean> {
-        const openedAdd =
-            (await driver.clickContentDescription(['Add', 'add', 'New'])) ||
-            (await driver.clickText(['Add config', 'Add', '+']))
-        if (!openedAdd) {
-            log('processing', 'v2rayNG add menu was not detected')
+        if (isAnyProxyForm(source) && !isProxyForm(source, protocol)) {
+            await driver.back()
+            await sleep(700)
+        }
+
+        if (!isProxyForm(await driver.source(), protocol)) {
+            const openedAdd =
+                (await driver.clickContentDescription(['Add', 'add', 'New'])) ||
+                (await driver.clickText(['Add config', 'Add', '+']))
+            if (!openedAdd) {
+                log('processing', 'v2rayNG add menu was not detected')
+                return false
+            }
+            await sleep(800)
+
+            const selected =
+                protocol === 'HTTP'
+                    ? await driver.clickText(['HTTP', 'Http', 'http'])
+                    : await driver.clickText(['SOCKS', 'Socks', 'socks', 'SOCKS5', 'Socks5'])
+            if (!selected) {
+                log('processing', `v2rayNG ${protocol} menu item was not detected`)
+                return false
+            }
+            await sleep(1000)
+        }
+
+        const filled = await this.fillManualProxyForm(driver, {
+            remarks,
+            address: proxy.host,
+            port: String(proxy.port),
+            user: proxy.user || '',
+            pass: proxy.pass || '',
+        })
+        if (!filled) {
+            log('processing', 'v2rayNG manual proxy form fields were not detected')
             return false
         }
-        await sleep(800)
-        await driver.clickText(['Custom config'])
-        await sleep(500)
-        const local = await driver.clickText([
-            'Import custom config from locally',
-            'Import custom config from local',
-            'Import from local',
-        ])
-        if (!local) return false
+
+        await this.saveManualProxyForm(driver)
         await sleep(1200)
-        if (!(await driver.clickText(['Download', 'Downloads']))) {
-            log('processing', 'Android file picker did not expose Download label; searching config file directly')
+        await driver.clickText([remarks, remarks.slice(0, 28)])
+        log('success', `v2rayNG ${protocol} proxy added manually for ${profileName}`)
+        return true
+    }
+
+    private async fillManualProxyForm(
+        driver: AppiumDriver,
+        values: {
+            remarks: string
+            address: string
+            port: string
+            user: string
+            pass: string
+        },
+    ): Promise<boolean> {
+        const fields = await driver.findAll('//android.widget.EditText')
+        if (fields.length < 3) return false
+
+        const orderedValues = [values.remarks, values.address, values.port, values.user, values.pass]
+        for (let index = 0; index < Math.min(fields.length, orderedValues.length); index += 1) {
+            await driver.click(fields[index])
+            await driver.clear(fields[index])
+            if (orderedValues[index]) await driver.type(fields[index], orderedValues[index])
+            await driver.hideKeyboard()
+            await sleep(250)
         }
-        await sleep(700)
-        return await driver.clickText([fileName, fileName.replace(/\.json$/i, '')])
+        return true
+    }
+
+    private async saveManualProxyForm(driver: AppiumDriver): Promise<void> {
+        const saved =
+            (await driver.clickContentDescription(['Save', 'save', 'Done', 'done', 'Confirm'])) ||
+            (await driver.clickText(['Save', 'Done', 'OK']))
+        if (saved) return
+
+        const rect = await driver.windowRect()
+        await driver.tap(rect.x + Math.floor(rect.width * 0.93), rect.y + Math.floor(rect.height * 0.11))
     }
 
     private async tryConnect(driver: AppiumDriver, log: StepLogger): Promise<boolean> {
@@ -139,112 +187,20 @@ export class V2rayNgManager {
     }
 }
 
-function v2rayConfig(proxy: ProxyPayload): Record<string, unknown> {
-    const protocol = String(proxy.method || 'http').toLowerCase().startsWith('socks') ? 'socks' : 'http'
-    const user =
-        proxy.user || proxy.pass
-            ? {
-                  level: 8,
-                  user: proxy.user || '',
-                  pass: proxy.pass || '',
-              }
-            : null
-    return {
-        dns: {
-            servers: ['1.1.1.1', '8.8.8.8'],
-            tag: 'dns-module',
-        },
-        remarks: `redeem-${proxy.host}-${proxy.port}`,
-        log: {
-            loglevel: 'warning',
-        },
-        inbounds: [
-            {
-                tag: 'socks',
-                listen: '127.0.0.1',
-                port: 10808,
-                protocol: 'socks',
-                settings: {
-                    auth: 'noauth',
-                    udp: true,
-                    userLevel: 8,
-                },
-                sniffing: {
-                    enabled: true,
-                    destOverride: ['http', 'tls'],
-                    routeOnly: false,
-                },
-            },
-        ],
-        outbounds: [
-            {
-                tag: 'proxy',
-                protocol,
-                mux: {
-                    enabled: false,
-                    concurrency: -1,
-                },
-                settings: {
-                    servers: [
-                        {
-                            address: proxy.host,
-                            level: 8,
-                            port: Number(proxy.port),
-                            ...(protocol === 'http' ? { ota: false } : {}),
-                            ...(user ? { users: [user] } : {}),
-                        },
-                    ],
-                },
-                streamSettings: {
-                    network: 'tcp',
-                    sockopt: {
-                        domainStrategy: 'UseIP',
-                        happyEyeballs: {
-                            interleave: 2,
-                            maxConcurrentTry: 4,
-                            prioritizeIPv6: false,
-                            tryDelayMs: 250,
-                        },
-                    },
-                },
-            },
-            {
-                tag: 'direct',
-                protocol: 'freedom',
-                settings: {
-                    domainStrategy: 'UseIP',
-                },
-            },
-            {
-                tag: 'block',
-                protocol: 'blackhole',
-                settings: {
-                    response: {
-                        type: 'http',
-                    },
-                },
-            },
-        ],
-        routing: {
-            domainStrategy: 'AsIs',
-            rules: [
-                {
-                    type: 'field',
-                    network: 'udp',
-                    port: '443',
-                    outboundTag: 'block',
-                },
-                {
-                    type: 'field',
-                    ip: ['geoip:private'],
-                    outboundTag: 'direct',
-                },
-                {
-                    type: 'field',
-                    domain: ['geosite:private'],
-                    outboundTag: 'direct',
-                },
-            ],
-        },
-    }
+function manualProtocol(proxy: ProxyPayload): ManualProtocol {
+    return String(proxy.method || 'http')
+        .toLowerCase()
+        .startsWith('socks')
+        ? 'SOCKS'
+        : 'HTTP'
+}
+
+function isProxyForm(source: string, protocol: ManualProtocol): boolean {
+    const lower = source.toLowerCase()
+    return lower.includes(protocol.toLowerCase()) && lower.includes('address') && lower.includes('port')
+}
+
+function isAnyProxyForm(source: string): boolean {
+    const lower = source.toLowerCase()
+    return (lower.includes('http') || lower.includes('socks')) && lower.includes('address') && lower.includes('port')
 }

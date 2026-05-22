@@ -75,10 +75,10 @@ dashboard `Redeem API Key`.
 - New LDPlayer profiles are modified before first launch with resolution
   `540,960,240`, CPU `2`, and memory `2048`.
 - Missing Bing/v2rayNG APKs are installed into that profile.
-- A v2rayNG custom config is generated from the task HTTP/SOCKS proxy and pushed
-  to `/sdcard/Download`.
-- Server uses Appium UI actions to import and connect that config. If the
-  v2rayNG UI labels differ, the task pauses in viewer for manual import/connect.
+- Server uses Appium UI actions to add the task HTTP/SOCKS proxy through the
+  v2rayNG `+` menu, fills host/port/user/password, saves it, and starts VPN.
+- If the v2rayNG UI labels differ, the task pauses in viewer for manual proxy
+  setup/connect.
 - Server opens the Bing verification link in the Android profile.
 - Open `/viewer`, read the captcha image from the task, and send the six digit
   code. The server types it into Bing when Appium finds the code field.
@@ -91,7 +91,7 @@ Open `/viewer` on the Redeem Server host. Enter the same API key used by the
 dashboard. The viewer shows queue status, logs, captcha image, six digit code
 input, Resume, Done, Fail, and Cancel controls.
 
-Use `Resume` after fixing a paused v2rayNG import or Bing login manually in
+Use `Resume` after fixing a paused v2rayNG proxy setup or Bing login manually in
 LDPlayer. Use `Done` only after Bing verification has actually finished.
 
 ## API
@@ -159,11 +159,11 @@ viewer but does not run phone redemption automation yet.
 
 ## Known Limits
 
-- v2rayNG import/connect is best effort because it depends on the installed
-  v2rayNG version and UI language. The generated custom config remains in the
-  LDPlayer Download folder for manual recovery.
-- The captcha is an image from the Rewards browser challenge. This server does
-  not include OCR; the viewer sends the six digit code to Appium.
+- v2rayNG add/connect is best effort because it depends on the installed v2rayNG
+  version and UI language.
+- The captcha is an image from the Rewards browser challenge. The server can
+  send it to 2Captcha when configured; otherwise the viewer sends the six digit
+  code to Appium.
 - The Bing login automation is selector based and pauses for manual recovery
   when Microsoft shows an unexpected approval, recovery, or risk screen.
 - Task state is in memory in v1. Restarting this server clears the task queue.

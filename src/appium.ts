@@ -111,6 +111,22 @@ export class AppiumDriver {
         await this.request(`/session/${this.sessionId}/element/${id}/click`, { method: 'POST', body: {} })
     }
 
+    async back(): Promise<void> {
+        await this.request(`/session/${this.sessionId}/back`, { method: 'POST', body: {} })
+    }
+
+    async hideKeyboard(): Promise<void> {
+        try {
+            await this.request(`/session/${this.sessionId}/appium/device/hide_keyboard`, {
+                method: 'POST',
+                body: {},
+                allowStatus: [404],
+            })
+        } catch {
+            // Some Android keyboards report an error when already hidden.
+        }
+    }
+
     async tap(x: number, y: number): Promise<void> {
         await this.request(`/session/${this.sessionId}/actions`, {
             method: 'POST',

@@ -75,6 +75,12 @@ export class RedeemAutomation {
                 if (this.finished(task)) return
             }
 
+            const liveSerial = await adb.resolveLiveSerial(instance.serial)
+            if (liveSerial !== instance.serial) {
+                task.deviceSerial = liveSerial
+                log('processing', `ADB serial changed from ${instance.serial} to ${liveSerial}; continuing with live device`)
+            }
+
             await adb.startPackage(instance.serial, this.config.packages.bing)
             await sleep(2500)
             const loggedIn = await bestEffortBingLogin(driver, payload.email, payload.pass, payload.totpSecret, log)

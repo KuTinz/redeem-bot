@@ -99,10 +99,11 @@ export class AdbClient {
     }
 
     async openUrl(serial: string, url: string, packageName?: string): Promise<void> {
+        const liveSerial = await this.resolveLiveSerial(serial)
         const args = ['shell', 'am', 'start', '-a', 'android.intent.action.VIEW']
         if (packageName) args.push('-p', packageName)
         args.push('-d', shellQuote(url))
-        await this.run(serial, args, false)
+        await this.run(liveSerial, args, false)
     }
 
     async forceStop(serial: string, packageName: string): Promise<void> {
@@ -117,12 +118,28 @@ export class AdbClient {
     }
 
     async startPackage(serial: string, packageName: string): Promise<void> {
+        const liveSerial = await this.resolveLiveSerial(serial)
         const result = await this.run(
-            serial,
+            liveSerial,
             ['shell', 'monkey', '-p', packageName, '-c', 'android.intent.category.LAUNCHER', '1'],
             true,
         )
         if (result.code !== 0) throw new Error(`Could not start ${packageName}: ${asErrorMessage(result.stderr || result.stdout)}`)
+    }
+
+    async resolveLiveSerial(serial: string): Promise<string> {
+        const devices = await this.devices()
+        if (devices.includes(serial)) return serial
+        const hostPort = serial.match(/^emulator-(\d+)$/)
+        if (hostPort) {
+            const port = Number.parseInt(hostPort[1], 10) + 1
+            const loopback = `127.0.0.1:${port}`
+            if (devices.includes(loopback)) return loopback
+            await this.connect(loopback)
+            if ((await this.devices()).includes(loopback)) return loopback
+        }
+        if (devices.length === 1) return devices[0]
+        throw new Error(`ADB device ${serial} not found. Online devices: ${devices.join(', ') || '(none)'}`)
     }
 }
 

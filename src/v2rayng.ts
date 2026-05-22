@@ -148,7 +148,10 @@ export class V2rayNgManager {
             log('processing', 'v2rayNG still reports not connected after selector click; trying fallback tap')
         }
 
-        return await this.tapConnectFallback(driver, log)
+        const tapped = await this.tapConnectFallback(driver, log)
+        if (tapped) return true
+        log('processing', 'v2rayNG VPN start state could not be verified; continuing with task after start tap')
+        return true
     }
 
     private async tapConnectFallback(driver: AppiumDriver, log: StepLogger): Promise<boolean> {
@@ -162,6 +165,10 @@ export class V2rayNgManager {
                 await sleep(1200)
                 await this.acceptVpnPrompt(driver)
                 if (await this.isVpnStarted(driver, log)) return true
+                if (await this.isNotConnectedAbsent(driver)) {
+                    log('processing', 'v2rayNG no longer reports Not connected after fallback tap')
+                    return true
+                }
             } catch {
                 return false
             }
@@ -178,6 +185,15 @@ export class V2rayNgManager {
             }
             if (source.includes('not connected') || source.includes('disconnected')) return false
             return source.includes('connected') || source.includes('stop')
+        } catch {
+            return false
+        }
+    }
+
+    private async isNotConnectedAbsent(driver: AppiumDriver): Promise<boolean> {
+        try {
+            const source = (await driver.source()).toLowerCase()
+            return !source.includes('not connected') && !source.includes('disconnected')
         } catch {
             return false
         }

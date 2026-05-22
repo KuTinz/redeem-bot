@@ -25,6 +25,13 @@ export interface RedeemServerConfig {
         url: string
         commandTimeoutMs: number
     }
+    captcha: {
+        provider: '' | '2captcha'
+        apiKey: string
+        apiBaseUrl: string
+        timeoutMs: number
+        pollIntervalMs: number
+    }
     apks: {
         bing: string
         v2rayng: string
@@ -72,6 +79,13 @@ function defaultConfig(rootDir: string): RedeemServerConfig {
         appium: {
             url: 'http://127.0.0.1:4723',
             commandTimeoutMs: 120000,
+        },
+        captcha: {
+            provider: '',
+            apiKey: '',
+            apiBaseUrl: 'https://2captcha.com',
+            timeoutMs: 120000,
+            pollIntervalMs: 5000,
         },
         apks: {
             bing: path.join(rootDir, 'apks', 'bing.apk'),

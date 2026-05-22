@@ -47,6 +47,11 @@ email as the LDPlayer name, with `540x960`, `2` CPU cores, and `2048` MB RAM.
 If more than one emulator is online and auto mapping cannot identify a profile,
 put its serial in `ldplayer.serialByProfile`.
 
+To auto-solve the six digit image captcha, set `captcha.provider` to
+`2captcha` and put your 2Captcha API key in `captcha.apiKey`. If captcha
+solving fails or is not configured, the task falls back to manual code entry in
+`/viewer`.
+
 5. Install project dependencies and build:
 
 ```powershell

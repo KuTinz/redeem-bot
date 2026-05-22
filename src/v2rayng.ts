@@ -39,11 +39,11 @@ export class V2rayNgManager {
         if (!imported) {
             throw new Error(`v2rayNG UI import did not finish. Import ${remotePath} from Custom config in v2rayNG, connect it, then Resume.`)
         }
-        const connected = await this.tryConnect(driver)
+        const connected = await this.tryConnect(driver, log)
         if (!connected) {
             throw new Error('v2rayNG config was imported but connect button was not detected. Connect it in LDPlayer, then Resume.')
         }
-        await driver.clickText(['OK', 'Allow'])
+        await this.acceptVpnPrompt(driver)
         log('success', 'v2rayNG connect action sent')
     }
 
@@ -81,12 +81,39 @@ export class V2rayNgManager {
         return await driver.clickText([fileName, fileName.replace(/\.json$/i, '')])
     }
 
-    private async tryConnect(driver: AppiumDriver): Promise<boolean> {
+    private async tryConnect(driver: AppiumDriver, log: StepLogger): Promise<boolean> {
         await sleep(1000)
-        return (
-            (await driver.clickContentDescription(['Connect', 'connect', 'Start'])) ||
-            (await driver.clickText(['Connect', 'Start']))
-        )
+        await this.acceptVpnPrompt(driver)
+        const clicked =
+            (await driver.clickContentDescription(['Connect', 'connect', 'Start', 'start', 'Not connected'])) ||
+            (await driver.clickText(['Connect', 'Start', 'Not connected', 'Disconnected']))
+        if (clicked) {
+            log('processing', 'v2rayNG connect button clicked by selector')
+            await sleep(1200)
+            await this.acceptVpnPrompt(driver)
+            return true
+        }
+
+        try {
+            const rect = await driver.windowRect()
+            const x = rect.x + Math.floor(rect.width * 0.9)
+            const y = rect.y + Math.floor(rect.height * 0.88)
+            await driver.tap(x, y)
+            log('processing', `v2rayNG connect button was not detected; tapped fallback position ${x},${y}`)
+            await sleep(1200)
+            await this.acceptVpnPrompt(driver)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private async acceptVpnPrompt(driver: AppiumDriver): Promise<void> {
+        for (let index = 0; index < 3; index += 1) {
+            const clicked = await driver.clickText(['OK', 'Allow', 'Cho phép', 'Đồng ý'])
+            if (!clicked) return
+            await sleep(700)
+        }
     }
 }
 

@@ -13,6 +13,15 @@ type AppiumElementsResponse = {
     value?: Array<Record<string, string>>
 }
 
+type AppiumWindowRectResponse = {
+    value?: {
+        width?: number
+        height?: number
+        x?: number
+        y?: number
+    }
+}
+
 export class AppiumClient {
     private readonly baseUrl: string
     private readonly timeoutMs: number
@@ -100,6 +109,38 @@ export class AppiumDriver {
 
     async click(id: string): Promise<void> {
         await this.request(`/session/${this.sessionId}/element/${id}/click`, { method: 'POST', body: {} })
+    }
+
+    async tap(x: number, y: number): Promise<void> {
+        await this.request(`/session/${this.sessionId}/actions`, {
+            method: 'POST',
+            body: {
+                actions: [
+                    {
+                        type: 'pointer',
+                        id: 'finger1',
+                        parameters: { pointerType: 'touch' },
+                        actions: [
+                            { type: 'pointerMove', duration: 0, x, y },
+                            { type: 'pointerDown', button: 0 },
+                            { type: 'pause', duration: 120 },
+                            { type: 'pointerUp', button: 0 },
+                        ],
+                    },
+                ],
+            },
+        })
+    }
+
+    async windowRect(): Promise<{ width: number; height: number; x: number; y: number }> {
+        const response = await this.request<AppiumWindowRectResponse>(`/session/${this.sessionId}/window/rect`)
+        const rect = response.body.value || {}
+        return {
+            width: rect.width || 540,
+            height: rect.height || 960,
+            x: rect.x || 0,
+            y: rect.y || 0,
+        }
     }
 
     async clear(id: string): Promise<void> {

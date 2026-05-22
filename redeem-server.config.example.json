@@ -20,6 +20,13 @@
     "url": "http://127.0.0.1:4723",
     "commandTimeoutMs": 120000
   },
+  "captcha": {
+    "provider": "",
+    "apiKey": "",
+    "apiBaseUrl": "https://2captcha.com",
+    "timeoutMs": 120000,
+    "pollIntervalMs": 5000
+  },
   "apks": {
     "bing": "./apks/bing.apk",
     "v2rayng": "./apks/v2rayng.apk",

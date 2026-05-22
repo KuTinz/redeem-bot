@@ -1,5 +1,6 @@
 import { AdbClient } from './adb.js'
 import { AppiumClient, AppiumDriver, bestEffortBingLogin, enterVerificationCode } from './appium.js'
+import { CaptchaSolver } from './captcha.js'
 import { RedeemServerConfig } from './config.js'
 import { LdPlayerManager } from './ldplayer.js'
 import { TaskStore } from './tasks.js'
@@ -12,12 +13,14 @@ export class RedeemAutomation {
     private readonly store: TaskStore
     private readonly ldplayer: LdPlayerManager
     private readonly appium: AppiumClient
+    private readonly captcha: CaptchaSolver
 
     constructor(config: RedeemServerConfig, store: TaskStore) {
         this.config = config
         this.store = store
         this.ldplayer = new LdPlayerManager(config)
         this.appium = new AppiumClient(config)
+        this.captcha = new CaptchaSolver(config)
     }
 
     async run(task: TaskRecord): Promise<void> {
@@ -81,14 +84,17 @@ export class RedeemAutomation {
             log('processing', 'Opening Bing app redeem verification link')
             await adb.openUrl(instance.serial, payload.urlRedem, this.config.packages.bing)
             await sleep(3500)
-            this.store.status(
-                task,
-                'waiting_code',
-                payload.captcha
-                    ? 'Waiting for six digit code from viewer; captcha image is attached to task.'
-                    : 'Waiting for six digit code from viewer.',
-            )
-            const code = await this.waitForCode(task, this.config.queue.codeTimeoutMs)
+            let code = await this.solveCaptcha(task, payload.captcha, log)
+            if (!code) {
+                this.store.status(
+                    task,
+                    'waiting_code',
+                    payload.captcha
+                        ? 'Waiting for six digit code from viewer; captcha image is attached to task.'
+                        : 'Waiting for six digit code from viewer.',
+                )
+                code = await this.waitForCode(task, this.config.queue.codeTimeoutMs)
+            }
             if (this.finished(task)) return
 
             if (!code || !(await enterVerificationCode(driver, code, log))) {
@@ -106,6 +112,18 @@ export class RedeemAutomation {
             this.store.status(task, 'done', 'Redeem verification code submitted to Bing app', 'done')
         } finally {
             await driver?.close().catch(() => undefined)
+        }
+    }
+
+    private async solveCaptcha(task: TaskRecord, captcha: string | undefined, log: StepLogger): Promise<string | null> {
+        if (!this.captcha.enabled()) return null
+        try {
+            const code = await this.captcha.solveImage(captcha, log)
+            if (code) this.store.status(task, 'processing', 'Using captcha code from 2Captcha')
+            return code
+        } catch (error) {
+            log('processing', `Captcha auto-solve failed: ${asErrorMessage(error)}; waiting for viewer input`)
+            return null
         }
     }
 

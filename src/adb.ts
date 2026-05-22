@@ -93,14 +93,15 @@ export class AdbClient {
     async scanFile(serial: string, filePath: string): Promise<void> {
         await this.run(
             serial,
-            ['shell', 'am', 'broadcast', '-a', 'android.intent.action.MEDIA_SCANNER_SCAN_FILE', '-d', `file://${filePath}`],
+            ['shell', 'am', 'broadcast', '-a', 'android.intent.action.MEDIA_SCANNER_SCAN_FILE', '-d', shellQuote(`file://${filePath}`)],
             true,
         )
     }
 
     async openUrl(serial: string, url: string, packageName?: string): Promise<void> {
-        const args = ['shell', 'am', 'start', '-a', 'android.intent.action.VIEW', '-d', url]
+        const args = ['shell', 'am', 'start', '-a', 'android.intent.action.VIEW']
         if (packageName) args.push('-p', packageName)
+        args.push('-d', shellQuote(url))
         await this.run(serial, args, false)
     }
 
@@ -112,4 +113,8 @@ export class AdbClient {
         )
         if (result.code !== 0) throw new Error(`Could not start ${packageName}: ${asErrorMessage(result.stderr || result.stdout)}`)
     }
+}
+
+function shellQuote(value: string): string {
+    return `'${value.replace(/'/g, `'\\''`)}'`
 }

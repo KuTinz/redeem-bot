@@ -85,24 +85,42 @@ export class V2rayNgManager {
         await sleep(1000)
         await this.acceptVpnPrompt(driver)
         const clicked =
-            (await driver.clickContentDescription(['Connect', 'connect', 'Start', 'start', 'Not connected'])) ||
-            (await driver.clickText(['Connect', 'Start', 'Not connected', 'Disconnected']))
+            (await driver.clickContentDescription(['Connect', 'connect', 'Start', 'start'])) ||
+            (await driver.clickText(['Connect', 'Start']))
         if (clicked) {
             log('processing', 'v2rayNG connect button clicked by selector')
             await sleep(1200)
             await this.acceptVpnPrompt(driver)
-            return true
+            if (await this.isConnected(driver)) return true
+            log('processing', 'v2rayNG still reports not connected after selector click; trying fallback tap')
         }
 
+        return await this.tapConnectFallback(driver, log)
+    }
+
+    private async tapConnectFallback(driver: AppiumDriver, log: StepLogger): Promise<boolean> {
+        for (let attempt = 1; attempt <= 3; attempt += 1) {
+            try {
+                const rect = await driver.windowRect()
+                const x = rect.x + Math.floor(rect.width * 0.9)
+                const y = rect.y + Math.floor(rect.height * 0.87)
+                await driver.tap(x, y)
+                log('processing', `v2rayNG fallback tapped start button at ${x},${y} (attempt ${attempt})`)
+                await sleep(1200)
+                await this.acceptVpnPrompt(driver)
+                if (await this.isConnected(driver)) return true
+            } catch {
+                return false
+            }
+        }
+        return false
+    }
+
+    private async isConnected(driver: AppiumDriver): Promise<boolean> {
         try {
-            const rect = await driver.windowRect()
-            const x = rect.x + Math.floor(rect.width * 0.9)
-            const y = rect.y + Math.floor(rect.height * 0.88)
-            await driver.tap(x, y)
-            log('processing', `v2rayNG connect button was not detected; tapped fallback position ${x},${y}`)
-            await sleep(1200)
-            await this.acceptVpnPrompt(driver)
-            return true
+            const source = (await driver.source()).toLowerCase()
+            if (source.includes('not connected') || source.includes('disconnected')) return false
+            return source.includes('connected')
         } catch {
             return false
         }

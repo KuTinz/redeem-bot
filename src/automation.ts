@@ -3,6 +3,7 @@ import { AppiumClient, AppiumDriver, bestEffortBingLogin, enterVerificationCode 
 import { CaptchaSolver } from './captcha.js'
 import { RedeemServerConfig } from './config.js'
 import { LdPlayerManager } from './ldplayer.js'
+import { SuperProxyManager } from './superproxy.js'
 import { TaskStore } from './tasks.js'
 import { RedeemPayload, StepLogger, TaskRecord } from './types.js'
 import { asErrorMessage, sleep } from './util.js'
@@ -43,7 +44,17 @@ export class RedeemAutomation {
             log('success', `Using LDPlayer profile ${instance.profileName} on ${instance.serial}`)
 
             await adb.installIfMissing(instance.serial, this.config.packages.bing, this.config.apks.bing, 'Bing', log)
-            await adb.installIfMissing(instance.serial, this.config.packages.v2rayng, this.config.apks.v2rayng, 'v2rayNG', log)
+            if (this.config.proxyApp === 'superproxy') {
+                await adb.installIfMissing(
+                    instance.serial,
+                    this.config.packages.superProxy,
+                    this.config.apks.superProxy,
+                    'Super Proxy',
+                    log,
+                )
+            } else {
+                await adb.installIfMissing(instance.serial, this.config.packages.v2rayng, this.config.apks.v2rayng, 'v2rayNG', log)
+            }
             await adb.installIfMissing(
                 instance.serial,
                 this.config.packages.appiumSettings,
@@ -156,9 +167,9 @@ export class RedeemAutomation {
         proxy: RedeemPayload['proxy'],
         log: StepLogger,
     ): Promise<AppiumDriver> {
-        const v2ray = new V2rayNgManager(this.config, adb)
+        const manager = this.proxyManager(adb)
         try {
-            await v2ray.prepareProxy(serial, profileName, proxy, driver, log)
+            await manager.prepareProxy(serial, profileName, proxy, driver, log)
             return driver
         } catch (error) {
             if (!isAppiumInstrumentationCrash(error)) throw error
@@ -168,8 +179,12 @@ export class RedeemAutomation {
 
         const retryDriver = await this.appium.createAndroidSession(serial)
         log('success', 'Appium UiAutomator2 session recreated')
-        await new V2rayNgManager(this.config, adb).prepareProxy(serial, profileName, proxy, retryDriver, log)
+        await this.proxyManager(adb).prepareProxy(serial, profileName, proxy, retryDriver, log)
         return retryDriver
+    }
+
+    private proxyManager(adb: AdbClient): V2rayNgManager | SuperProxyManager {
+        return this.config.proxyApp === 'superproxy' ? new SuperProxyManager(this.config, adb) : new V2rayNgManager(this.config, adb)
     }
 
     private async withAppiumRetry<T>(

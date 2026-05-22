@@ -8,6 +8,7 @@ export interface RedeemServerConfig {
     apiKey: string
     rootDir: string
     runtimeDir: string
+    proxyApp: 'v2rayng' | 'superproxy'
     ldplayer: {
         ldconsolePath: string
         adbPath: string
@@ -35,11 +36,13 @@ export interface RedeemServerConfig {
     apks: {
         bing: string
         v2rayng: string
+        superProxy: string
         appiumSettings: string
     }
     packages: {
         bing: string
         v2rayng: string
+        superProxy: string
         appiumSettings: string
     }
     queue: {
@@ -63,6 +66,7 @@ function defaultConfig(rootDir: string): RedeemServerConfig {
         apiKey: '',
         rootDir,
         runtimeDir: path.join(rootDir, 'runtime'),
+        proxyApp: 'v2rayng',
         ldplayer: {
             ldconsolePath: '',
             adbPath: '',
@@ -90,11 +94,13 @@ function defaultConfig(rootDir: string): RedeemServerConfig {
         apks: {
             bing: path.join(rootDir, 'apks', 'bing.apk'),
             v2rayng: path.join(rootDir, 'apks', 'v2rayng.apk'),
+            superProxy: path.join(rootDir, 'apks', 'superproxy.apk'),
             appiumSettings: path.join(rootDir, 'apks', 'appium-settings.apk'),
         },
         packages: {
             bing: 'com.microsoft.bing',
             v2rayng: 'com.v2ray.ang',
+            superProxy: 'com.scheler.superproxy',
             appiumSettings: 'io.appium.settings',
         },
         queue: {
@@ -127,6 +133,7 @@ function resolveConfiguredPaths(config: RedeemServerConfig, baseDir: string): Re
     config.runtimeDir = absoluteFrom(baseDir, config.runtimeDir)
     config.apks.bing = absoluteFrom(baseDir, config.apks.bing)
     config.apks.v2rayng = absoluteFrom(baseDir, config.apks.v2rayng)
+    config.apks.superProxy = absoluteFrom(baseDir, config.apks.superProxy)
     config.apks.appiumSettings = absoluteFrom(baseDir, config.apks.appiumSettings)
     if (config.ldplayer.ldconsolePath) config.ldplayer.ldconsolePath = absoluteFrom(baseDir, config.ldplayer.ldconsolePath)
     if (config.ldplayer.adbPath) config.ldplayer.adbPath = absoluteFrom(baseDir, config.ldplayer.adbPath)

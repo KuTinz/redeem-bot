@@ -11,9 +11,10 @@ export async function runHealthChecks(config: RedeemServerConfig): Promise<Healt
         if (!(await fileExists(config.apks.bing))) throw new Error(`Missing ${config.apks.bing}`)
         return config.apks.bing
     })
-    await check(results, 'v2rayng-apk', async () => {
-        if (!(await fileExists(config.apks.v2rayng))) throw new Error(`Missing ${config.apks.v2rayng}`)
-        return config.apks.v2rayng
+    await check(results, `${config.proxyApp}-apk`, async () => {
+        const apk = config.proxyApp === 'superproxy' ? config.apks.superProxy : config.apks.v2rayng
+        if (!(await fileExists(apk))) throw new Error(`Missing ${apk}`)
+        return apk
     })
     await check(results, 'ldconsole', async () => await new LdPlayerManager(config).resolveConsolePath())
     await check(results, 'adb', async () => {

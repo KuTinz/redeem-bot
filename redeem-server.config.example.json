@@ -3,6 +3,7 @@
   "port": 8787,
   "apiKey": "change-me",
   "runtimeDir": "./runtime",
+  "proxyApp": "v2rayng",
   "ldplayer": {
     "ldconsolePath": "",
     "adbPath": "",
@@ -30,11 +31,13 @@
   "apks": {
     "bing": "./apks/bing.apk",
     "v2rayng": "./apks/v2rayng.apk",
+    "superProxy": "./apks/superproxy.apk",
     "appiumSettings": "./apks/appium-settings.apk"
   },
   "packages": {
     "bing": "com.microsoft.bing",
     "v2rayng": "com.v2ray.ang",
+    "superProxy": "com.scheler.superproxy",
     "appiumSettings": "io.appium.settings"
   },
   "queue": {

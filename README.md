@@ -1,11 +1,12 @@
 # Redeem Server
 
 Standalone redeem task server for the local Microsoft Rewards dashboard. It runs on
-the Windows machine that has LDPlayer, ADB, Appium, Bing, and v2rayNG available.
+the Windows machine that has LDPlayer, ADB, Appium, Bing, and a supported Android
+proxy app available.
 
 The existing dashboard sends `redem_bing` tasks to this server. The server keeps
 one in-memory task queue, creates one LDPlayer profile per email when needed,
-installs missing APKs, prepares v2rayNG, opens the Bing app verification link,
+installs missing APKs, prepares the Android proxy app, opens the Bing app verification link,
 and returns task logs for the dashboard overlay.
 
 ## Files
@@ -16,12 +17,14 @@ Put APKs in this directory before bootstrapping a new LDPlayer profile:
 apks/
   bing.apk
   v2rayng.apk
+  superproxy.apk
   appium-settings.apk
 ```
 
-`bing.apk` and `v2rayng.apk` are required for a new profile. The Appium Settings
-APK is optional. Appium UiAutomator2 server APKs are normally installed by the
-Appium driver itself when it creates a session.
+`bing.apk` is required for a new profile. Add `v2rayng.apk` or
+`superproxy.apk` depending on `proxyApp` in config. The Appium Settings APK is
+optional. Appium UiAutomator2 server APKs are normally installed by the Appium
+driver itself when it creates a session.
 
 ## Windows Setup
 
@@ -46,6 +49,10 @@ auto-detected LDPlayer install path is wrong. New profiles default to the exact
 email as the LDPlayer name, with `540x960`, `2` CPU cores, and `2048` MB RAM.
 If more than one emulator is online and auto mapping cannot identify a profile,
 put its serial in `ldplayer.serialByProfile`.
+
+Set `proxyApp` to `superproxy` and put Super Proxy at `apks/superproxy.apk` to
+use Super Proxy for HTTP/SOCKS routing. Leave `proxyApp` as `v2rayng` to use
+the older v2rayNG flow.
 
 To auto-solve the six digit image captcha, set `captcha.provider` to
 `2captcha` and put your 2Captcha API key in `captcha.apiKey`. If captcha
@@ -74,12 +81,12 @@ dashboard `Redeem API Key`.
   from the exact email, for example `name@example.com`.
 - New LDPlayer profiles are modified before first launch with resolution
   `540,960,240`, CPU `2`, and memory `2048`.
-- Missing Bing/v2rayNG APKs are installed into that profile.
-- Server clears existing v2rayNG app data, then uses Appium UI actions to add
-  the task HTTP/SOCKS proxy through the v2rayNG `+` menu, fills
-  host/port/user/password, saves it, and starts VPN.
-- If the v2rayNG UI labels differ, the task pauses in viewer for manual proxy
-  setup/connect.
+- Missing Bing and selected proxy app APKs are installed into that profile.
+- Server clears existing proxy app data, then uses Appium UI actions to add the
+  task HTTP/SOCKS proxy, fills host/port/user/password, saves it, and starts VPN.
+- Set `proxyApp` to `superproxy` to use Super Proxy, or `v2rayng` to use the old
+  v2rayNG flow.
+- If the proxy app UI labels differ, the task pauses in viewer for manual proxy setup/connect.
 - Server opens the Bing verification link in the Android profile.
 - Open `/viewer`, read the captcha image from the task, and send the six digit
   code. The server types it into Bing when Appium finds the code field.
@@ -92,7 +99,7 @@ Open `/viewer` on the Redeem Server host. Enter the same API key used by the
 dashboard. The viewer shows queue status, logs, captcha image, six digit code
 input, Resume, Done, Fail, and Cancel controls.
 
-Use `Resume` after fixing a paused v2rayNG proxy setup or Bing login manually in
+Use `Resume` after fixing a paused proxy setup or Bing login manually in
 LDPlayer. Use `Done` only after Bing verification has actually finished.
 
 ## API
@@ -160,7 +167,7 @@ viewer but does not run phone redemption automation yet.
 
 ## Known Limits
 
-- v2rayNG add/connect is best effort because it depends on the installed v2rayNG
+- Proxy app add/connect is best effort because it depends on the installed app
   version and UI language.
 - The captcha is an image from the Rewards browser challenge. The server can
   send it to 2Captcha when configured; otherwise the viewer sends the six digit

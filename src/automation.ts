@@ -58,8 +58,14 @@ export class RedeemAutomation {
             log('success', 'Appium UiAutomator2 session created')
 
             try {
-                const v2ray = new V2rayNgManager(this.config, adb)
-                await v2ray.prepareProxy(instance.serial, instance.profileName, payload.proxy, driver, log)
+                driver = await this.prepareProxyWithAppiumRetry(
+                    adb,
+                    driver,
+                    instance.serial,
+                    instance.profileName,
+                    payload.proxy,
+                    log,
+                )
             } catch (error) {
                 await this.pauseForManual(
                     task,
@@ -115,6 +121,30 @@ export class RedeemAutomation {
         }
     }
 
+    private async prepareProxyWithAppiumRetry(
+        adb: AdbClient,
+        driver: AppiumDriver,
+        serial: string,
+        profileName: string,
+        proxy: RedeemPayload['proxy'],
+        log: StepLogger,
+    ): Promise<AppiumDriver> {
+        const v2ray = new V2rayNgManager(this.config, adb)
+        try {
+            await v2ray.prepareProxy(serial, profileName, proxy, driver, log)
+            return driver
+        } catch (error) {
+            if (!isAppiumInstrumentationCrash(error)) throw error
+            log('processing', 'Appium UiAutomator2 instrumentation crashed during proxy setup; recreating session and retrying once')
+            await driver.close().catch(() => undefined)
+        }
+
+        const retryDriver = await this.appium.createAndroidSession(serial)
+        log('success', 'Appium UiAutomator2 session recreated')
+        await new V2rayNgManager(this.config, adb).prepareProxy(serial, profileName, proxy, retryDriver, log)
+        return retryDriver
+    }
+
     private async solveCaptcha(task: TaskRecord, captcha: string | undefined, log: StepLogger): Promise<string | null> {
         if (!this.captcha.enabled()) return null
         try {
@@ -158,4 +188,14 @@ export class RedeemAutomation {
     private finished(task: TaskRecord): boolean {
         return ['done', 'failed', 'cancelled'].includes(task.status)
     }
+}
+
+function isAppiumInstrumentationCrash(error: unknown): boolean {
+    const message = asErrorMessage(error).toLowerCase()
+    return (
+        message.includes('uiautomator2 server') ||
+        message.includes('instrumentation process is not running') ||
+        message.includes('probably crashed') ||
+        message.includes('socket hang up')
+    )
 }

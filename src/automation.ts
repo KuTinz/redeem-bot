@@ -79,7 +79,7 @@ export class RedeemAutomation {
             }
 
             log('processing', 'Opening Bing app redeem verification link')
-            await adb.openUrl(instance.serial, payload.urlRedem)
+            await adb.openUrl(instance.serial, payload.urlRedem, this.config.packages.bing)
             await sleep(3500)
             this.store.status(
                 task,

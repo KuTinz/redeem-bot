@@ -98,8 +98,10 @@ export class AdbClient {
         )
     }
 
-    async openUrl(serial: string, url: string): Promise<void> {
-        await this.run(serial, ['shell', 'am', 'start', '-a', 'android.intent.action.VIEW', '-d', url], false)
+    async openUrl(serial: string, url: string, packageName?: string): Promise<void> {
+        const args = ['shell', 'am', 'start', '-a', 'android.intent.action.VIEW', '-d', url]
+        if (packageName) args.push('-p', packageName)
+        await this.run(serial, args, false)
     }
 
     async startPackage(serial: string, packageName: string): Promise<void> {

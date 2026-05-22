@@ -83,7 +83,15 @@ export class RedeemAutomation {
 
             await adb.startPackage(instance.serial, this.config.packages.bing)
             await sleep(2500)
-            const loggedIn = await bestEffortBingLogin(driver, payload.email, payload.pass, payload.totpSecret, log)
+            const loginResult = await this.withAppiumRetry(
+                driver,
+                liveSerial,
+                'Bing login',
+                retryDriver => bestEffortBingLogin(retryDriver, payload.email, payload.pass, payload.totpSecret, log),
+                log,
+            )
+            driver = loginResult.driver
+            const loggedIn = loginResult.value
             if (!loggedIn) {
                 await this.pauseForManual(
                     task,
@@ -109,7 +117,20 @@ export class RedeemAutomation {
             }
             if (this.finished(task)) return
 
-            if (!code || !(await enterVerificationCode(driver, code, log))) {
+            let submitted = false
+            if (code) {
+                const submitResult = await this.withAppiumRetry(
+                    driver,
+                    liveSerial,
+                    'Bing verification code entry',
+                    retryDriver => enterVerificationCode(retryDriver, code, log),
+                    log,
+                )
+                driver = submitResult.driver
+                submitted = submitResult.value
+            }
+
+            if (!submitted) {
                 await this.pauseForManual(
                     task,
                     'Could not find Bing code input. Finish verify in LDPlayer and mark Done in viewer.',
@@ -149,6 +170,26 @@ export class RedeemAutomation {
         log('success', 'Appium UiAutomator2 session recreated')
         await new V2rayNgManager(this.config, adb).prepareProxy(serial, profileName, proxy, retryDriver, log)
         return retryDriver
+    }
+
+    private async withAppiumRetry<T>(
+        driver: AppiumDriver,
+        serial: string,
+        label: string,
+        action: (driver: AppiumDriver) => Promise<T>,
+        log: StepLogger,
+    ): Promise<{ driver: AppiumDriver; value: T }> {
+        try {
+            return { driver, value: await action(driver) }
+        } catch (error) {
+            if (!isAppiumInstrumentationCrash(error)) throw error
+            log('processing', `Appium UiAutomator2 instrumentation crashed during ${label}; recreating session and retrying once`)
+            await driver.close().catch(() => undefined)
+        }
+
+        const retryDriver = await this.appium.createAndroidSession(serial)
+        log('success', 'Appium UiAutomator2 session recreated')
+        return { driver: retryDriver, value: await action(retryDriver) }
     }
 
     private async solveCaptcha(task: TaskRecord, captcha: string | undefined, log: StepLogger): Promise<string | null> {

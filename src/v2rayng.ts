@@ -91,7 +91,7 @@ export class V2rayNgManager {
             log('processing', 'v2rayNG connect button clicked by selector')
             await sleep(1200)
             await this.acceptVpnPrompt(driver)
-            if (await this.isConnected(driver)) return true
+            if (await this.isVpnStarted(driver, log)) return true
             log('processing', 'v2rayNG still reports not connected after selector click; trying fallback tap')
         }
 
@@ -108,7 +108,7 @@ export class V2rayNgManager {
                 log('processing', `v2rayNG fallback tapped start button at ${x},${y} (attempt ${attempt})`)
                 await sleep(1200)
                 await this.acceptVpnPrompt(driver)
-                if (await this.isConnected(driver)) return true
+                if (await this.isVpnStarted(driver, log)) return true
             } catch {
                 return false
             }
@@ -116,11 +116,15 @@ export class V2rayNgManager {
         return false
     }
 
-    private async isConnected(driver: AppiumDriver): Promise<boolean> {
+    private async isVpnStarted(driver: AppiumDriver, log: StepLogger): Promise<boolean> {
         try {
             const source = (await driver.source()).toLowerCase()
+            if (source.includes('fail to detect internet connection') || source.includes('context deadline exceeded')) {
+                log('processing', 'v2rayNG VPN service started, but its internet check failed; continuing with task')
+                return true
+            }
             if (source.includes('not connected') || source.includes('disconnected')) return false
-            return source.includes('connected')
+            return source.includes('connected') || source.includes('stop')
         } catch {
             return false
         }

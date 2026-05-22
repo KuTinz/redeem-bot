@@ -26,6 +26,11 @@ export class V2rayNgManager {
         const jsonPath = await this.writeConfig(profileName, proxy)
         const remotePath = `/sdcard/Download/${path.basename(jsonPath)}`
         await this.adb.push(serial, jsonPath, remotePath)
+        await this.adb.chmod(serial, remotePath, '644')
+        await this.adb.scanFile(serial, remotePath)
+        if (!(await this.adb.fileExists(serial, remotePath))) {
+            throw new Error(`Proxy custom config was pushed but is not visible at ${remotePath}`)
+        }
         log('success', `Proxy custom config pushed to ${remotePath}`)
 
         await this.adb.startPackage(serial, this.config.packages.v2rayng)
@@ -90,56 +95,107 @@ function v2rayConfig(proxy: ProxyPayload): Record<string, unknown> {
     const user =
         proxy.user || proxy.pass
             ? {
+                  level: 8,
                   user: proxy.user || '',
                   pass: proxy.pass || '',
               }
             : null
     return {
+        dns: {
+            servers: ['1.1.1.1', '8.8.8.8'],
+            tag: 'dns-module',
+        },
         remarks: `redeem-${proxy.host}-${proxy.port}`,
         log: {
             loglevel: 'warning',
         },
         inbounds: [
             {
-                tag: 'socks-in',
+                tag: 'socks',
                 listen: '127.0.0.1',
                 port: 10808,
                 protocol: 'socks',
                 settings: {
                     auth: 'noauth',
                     udp: true,
+                    userLevel: 8,
                 },
-            },
-            {
-                tag: 'http-in',
-                listen: '127.0.0.1',
-                port: 10809,
-                protocol: 'http',
-                settings: {},
+                sniffing: {
+                    enabled: true,
+                    destOverride: ['http', 'tls'],
+                    routeOnly: false,
+                },
             },
         ],
         outbounds: [
             {
                 tag: 'proxy',
                 protocol,
+                mux: {
+                    enabled: false,
+                    concurrency: -1,
+                },
                 settings: {
                     servers: [
                         {
                             address: proxy.host,
+                            level: 8,
                             port: Number(proxy.port),
+                            ...(protocol === 'http' ? { ota: false } : {}),
                             ...(user ? { users: [user] } : {}),
                         },
                     ],
+                },
+                streamSettings: {
+                    network: 'tcp',
+                    sockopt: {
+                        domainStrategy: 'UseIP',
+                        happyEyeballs: {
+                            interleave: 2,
+                            maxConcurrentTry: 4,
+                            prioritizeIPv6: false,
+                            tryDelayMs: 250,
+                        },
+                    },
                 },
             },
             {
                 tag: 'direct',
                 protocol: 'freedom',
+                settings: {
+                    domainStrategy: 'UseIP',
+                },
             },
             {
                 tag: 'block',
                 protocol: 'blackhole',
+                settings: {
+                    response: {
+                        type: 'http',
+                    },
+                },
             },
         ],
+        routing: {
+            domainStrategy: 'AsIs',
+            rules: [
+                {
+                    type: 'field',
+                    network: 'udp',
+                    port: '443',
+                    outboundTag: 'block',
+                },
+                {
+                    type: 'field',
+                    ip: ['geoip:private'],
+                    outboundTag: 'direct',
+                },
+                {
+                    type: 'field',
+                    domain: ['geosite:private'],
+                    outboundTag: 'direct',
+                },
+            ],
+        },
     }
 }

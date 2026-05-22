@@ -81,6 +81,23 @@ export class AdbClient {
         await this.run(serial, ['push', source, destination], false)
     }
 
+    async fileExists(serial: string, filePath: string): Promise<boolean> {
+        const result = await this.run(serial, ['shell', 'ls', '-l', filePath], true)
+        return result.code === 0
+    }
+
+    async chmod(serial: string, filePath: string, mode: string): Promise<void> {
+        await this.run(serial, ['shell', 'chmod', mode, filePath], true)
+    }
+
+    async scanFile(serial: string, filePath: string): Promise<void> {
+        await this.run(
+            serial,
+            ['shell', 'am', 'broadcast', '-a', 'android.intent.action.MEDIA_SCANNER_SCAN_FILE', '-d', `file://${filePath}`],
+            true,
+        )
+    }
+
     async openUrl(serial: string, url: string): Promise<void> {
         await this.run(serial, ['shell', 'am', 'start', '-a', 'android.intent.action.VIEW', '-d', url], false)
     }

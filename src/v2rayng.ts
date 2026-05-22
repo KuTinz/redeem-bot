@@ -24,8 +24,13 @@ export class V2rayNgManager {
     ): Promise<void> {
         if (!proxy?.host || !proxy.port) throw new Error('Redeem task has no proxy host or port')
 
+        log('processing', 'Clearing existing v2rayNG configs before adding task proxy')
+        await this.adb.forceStop(serial, this.config.packages.v2rayng)
+        await this.adb.clearPackage(serial, this.config.packages.v2rayng)
+        log('success', 'Existing v2rayNG configs cleared')
+
         await this.adb.startPackage(serial, this.config.packages.v2rayng)
-        await sleep(2000)
+        await sleep(3000)
 
         const added = await this.tryAddManualProxy(profileName, proxy, driver, log)
         if (!added) {

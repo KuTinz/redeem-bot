@@ -75,8 +75,9 @@ dashboard `Redeem API Key`.
 - New LDPlayer profiles are modified before first launch with resolution
   `540,960,240`, CPU `2`, and memory `2048`.
 - Missing Bing/v2rayNG APKs are installed into that profile.
-- Server uses Appium UI actions to add the task HTTP/SOCKS proxy through the
-  v2rayNG `+` menu, fills host/port/user/password, saves it, and starts VPN.
+- Server clears existing v2rayNG app data, then uses Appium UI actions to add
+  the task HTTP/SOCKS proxy through the v2rayNG `+` menu, fills
+  host/port/user/password, saves it, and starts VPN.
 - If the v2rayNG UI labels differ, the task pauses in viewer for manual proxy
   setup/connect.
 - Server opens the Bing verification link in the Android profile.

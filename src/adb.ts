@@ -105,6 +105,17 @@ export class AdbClient {
         await this.run(serial, args, false)
     }
 
+    async forceStop(serial: string, packageName: string): Promise<void> {
+        await this.run(serial, ['shell', 'am', 'force-stop', packageName], true)
+    }
+
+    async clearPackage(serial: string, packageName: string): Promise<void> {
+        const result = await this.run(serial, ['shell', 'pm', 'clear', packageName], true)
+        if (result.code !== 0 || !/Success/i.test(`${result.stdout}\n${result.stderr}`)) {
+            throw new Error(`Could not clear ${packageName}: ${asErrorMessage(result.stderr || result.stdout)}`)
+        }
+    }
+
     async startPackage(serial: string, packageName: string): Promise<void> {
         const result = await this.run(
             serial,

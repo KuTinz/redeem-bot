@@ -107,14 +107,20 @@ export class AdbClient {
     }
 
     async forceStop(serial: string, packageName: string): Promise<void> {
-        await this.run(serial, ['shell', 'am', 'force-stop', packageName], true)
+        await this.run(await this.resolveLiveSerial(serial), ['shell', 'am', 'force-stop', packageName], true)
     }
 
     async clearPackage(serial: string, packageName: string): Promise<void> {
-        const result = await this.run(serial, ['shell', 'pm', 'clear', packageName], true)
-        if (result.code !== 0 || !/Success/i.test(`${result.stdout}\n${result.stderr}`)) {
-            throw new Error(`Could not clear ${packageName}: ${asErrorMessage(result.stderr || result.stdout)}`)
+        let lastOutput = ''
+        for (let attempt = 1; attempt <= 3; attempt += 1) {
+            const liveSerial = await this.resolveLiveSerial(serial)
+            const result = await this.run(liveSerial, ['shell', 'pm', 'clear', packageName], true)
+            lastOutput = result.stderr || result.stdout
+            if (result.code === 0 && /Success/i.test(`${result.stdout}\n${result.stderr}`)) return
+            if (!isTransientAdbFailure(lastOutput)) break
+            await sleep(1500)
         }
+        throw new Error(`Could not clear ${packageName}: ${asErrorMessage(lastOutput)}`)
     }
 
     async startPackage(serial: string, packageName: string): Promise<void> {
@@ -138,9 +144,18 @@ export class AdbClient {
             await this.connect(loopback)
             if ((await this.devices()).includes(loopback)) return loopback
         }
+        if (/^127\.0\.0\.1:\d+$/.test(serial)) {
+            await this.connect(serial)
+            if ((await this.devices()).includes(serial)) return serial
+        }
         if (devices.length === 1) return devices[0]
         throw new Error(`ADB device ${serial} not found. Online devices: ${devices.join(', ') || '(none)'}`)
     }
+}
+
+function isTransientAdbFailure(output: string): boolean {
+    const lower = output.toLowerCase()
+    return lower.includes('device offline') || lower.includes('device unauthorized') || lower.includes('not found')
 }
 
 function shellQuote(value: string): string {

@@ -6,9 +6,15 @@
   "ldplayer": {
     "ldconsolePath": "",
     "adbPath": "",
+    "profileNameMode": "email",
     "profilePrefix": "redeem-",
+    "newProfile": {
+      "resolution": "540,960,240",
+      "cpu": 2,
+      "memory": 2048
+    },
     "serialByProfile": {},
-    "bootTimeoutMs": 120000
+    "bootTimeoutMs": 300000
   },
   "appium": {
     "url": "http://127.0.0.1:4723",

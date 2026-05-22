@@ -42,9 +42,10 @@ Copy-Item .\redeem-server.config.example.json .\redeem-server.config.json
 ```
 
 Set `apiKey`. Set `ldplayer.ldconsolePath` and `ldplayer.adbPath` if the
-auto-detected LDPlayer install path is wrong. If more than one emulator is
-online and auto mapping cannot identify a profile, put its serial in
-`ldplayer.serialByProfile`.
+auto-detected LDPlayer install path is wrong. New profiles default to the exact
+email as the LDPlayer name, with `540x960`, `2` CPU cores, and `2048` MB RAM.
+If more than one emulator is online and auto mapping cannot identify a profile,
+put its serial in `ldplayer.serialByProfile`.
 
 5. Install project dependencies and build:
 
@@ -65,7 +66,9 @@ dashboard `Redeem API Key`.
 - Its verify watcher detects the Bing app challenge and sends
   `POST /api/sendTask`.
 - Redeem Server queues the task and creates/reuses an LDPlayer profile named
-  from the email, for example `redeem-name-example-com`.
+  from the exact email, for example `name@example.com`.
+- New LDPlayer profiles are modified before first launch with resolution
+  `540,960,240`, CPU `2`, and memory `2048`.
 - Missing Bing/v2rayNG APKs are installed into that profile.
 - A v2rayNG custom config is generated from the task HTTP/SOCKS proxy and pushed
   to `/sdcard/Download`.

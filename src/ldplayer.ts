@@ -50,7 +50,7 @@ export class LdPlayerManager {
     }
 
     async ensureProfile(email: string, adb: AdbClient, log: StepLogger): Promise<LdInstance> {
-        const profileName = sanitizeProfileName(this.config.ldplayer.profilePrefix, email)
+        const profileName = this.profileNameForEmail(email)
         let profiles = await this.listProfiles()
         let profile = profiles.find(item => item.name === profileName)
         let created = false
@@ -60,6 +60,7 @@ export class LdPlayerManager {
             profiles = await this.listProfiles()
             profile = profiles.find(item => item.name === profileName)
             created = true
+            await this.modifyNewProfile(profileName, log)
         }
         if (!profile) throw new Error(`LDPlayer did not expose profile ${profileName} after add`)
 
@@ -106,7 +107,8 @@ export class LdPlayerManager {
         }
         const devices = await adb.devices()
         throw new Error(
-            `Could not map LDPlayer profile ${profile.name} to ADB. Devices: ${devices.join(', ') || '(none)'}. Configure ldplayer.serialByProfile.`,
+            `Could not map LDPlayer profile ${profile.name} to ADB. Devices: ${devices.join(', ') || '(none)'}. ` +
+                `Enable LDPlayer ADB/local connection, or configure ldplayer.serialByProfile for this profile.`,
         )
     }
 
@@ -122,6 +124,32 @@ export class LdPlayerManager {
         const source = existingProfiles.find(profile => profile.index === 0) || existingProfiles[0]
         if (!source) throw new Error('LDPlayer add failed and no existing instance is available for copy fallback')
         await this.run(['copy', '--name', profileName, '--from', String(source.index)])
+    }
+
+    private async modifyNewProfile(profileName: string, log: StepLogger): Promise<void> {
+        const settings = this.config.ldplayer.newProfile
+        log(
+            'processing',
+            `Applying LDPlayer profile settings | resolution=${settings.resolution} | cpu=${settings.cpu} | memory=${settings.memory}`,
+        )
+        await this.run([
+            'modify',
+            '--name',
+            profileName,
+            '--resolution',
+            settings.resolution,
+            '--cpu',
+            String(settings.cpu),
+            '--memory',
+            String(settings.memory),
+        ])
+    }
+
+    private profileNameForEmail(email: string): string {
+        const cleanEmail = email.trim()
+        if (this.config.ldplayer.profileNameMode === 'email') return cleanEmail
+        if (this.config.ldplayer.profileNameMode === 'prefixed-email') return `${this.config.ldplayer.profilePrefix}${cleanEmail}`
+        return sanitizeProfileName(this.config.ldplayer.profilePrefix, cleanEmail)
     }
 
     private async run(args: string[]) {

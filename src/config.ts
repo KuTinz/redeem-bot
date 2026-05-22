@@ -11,7 +11,13 @@ export interface RedeemServerConfig {
     ldplayer: {
         ldconsolePath: string
         adbPath: string
+        profileNameMode: 'email' | 'prefixed-email' | 'safe'
         profilePrefix: string
+        newProfile: {
+            resolution: string
+            cpu: number
+            memory: number
+        }
         serialByProfile: Record<string, string>
         bootTimeoutMs: number
     }
@@ -53,9 +59,15 @@ function defaultConfig(rootDir: string): RedeemServerConfig {
         ldplayer: {
             ldconsolePath: '',
             adbPath: '',
+            profileNameMode: 'email',
             profilePrefix: 'redeem-',
+            newProfile: {
+                resolution: '540,960,240',
+                cpu: 2,
+                memory: 2048,
+            },
             serialByProfile: {},
-            bootTimeoutMs: 120000,
+            bootTimeoutMs: 300000,
         },
         appium: {
             url: 'http://127.0.0.1:4723',

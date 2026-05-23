@@ -154,10 +154,10 @@ export class SuperProxyManager {
         for (let attempt = 0; attempt < 4; attempt += 1) {
             const source = (await driver.source()).toLowerCase()
             if (source.includes('authentication method')) {
-                if (enabled && source.includes('basic')) return true
+                if (enabled && (source.includes('basic') || source.includes('username/password'))) return true
                 if (!enabled && source.includes('none')) return true
 
-                const targetLabels = enabled ? ['Basic', 'User/password', 'Username/password', 'Password'] : ['None']
+                const targetLabels = enabled ? ['Username/Password', 'Basic', 'User/password', 'Username/password', 'Password'] : ['None']
                 if (!(await driver.clickText(['None', 'Basic', 'Authentication method']))) return false
                 await sleep(500)
                 await driver.clickText(targetLabels)
@@ -172,8 +172,8 @@ export class SuperProxyManager {
     private async scrollDown(driver: AppiumDriver): Promise<void> {
         const rect = await driver.windowRect()
         const x = rect.x + Math.floor(rect.width * 0.5)
-        const y1 = rect.y + Math.floor(rect.height * 0.78)
-        const y2 = rect.y + Math.floor(rect.height * 0.38)
+        const y1 = rect.y + Math.floor(rect.height * 0.66)
+        const y2 = rect.y + Math.floor(rect.height * 0.28)
         await driver.swipe(x, y1, x, y2)
         await sleep(700)
     }
@@ -203,13 +203,10 @@ export class SuperProxyManager {
         for (let attempt = 0; attempt < 4; attempt += 1) {
             const source = (await driver.source()).toLowerCase()
             const fields = await driver.findAll('//android.widget.EditText')
-            const authVisible = source.includes('user') || source.includes('password')
-            if (authVisible && fields.length >= 5) {
+            const sourceWithoutMethod = source.replace(/username\s*\/\s*password/g, '')
+            const authFieldsVisible = sourceWithoutMethod.includes('username') && sourceWithoutMethod.includes('password')
+            if (authFieldsVisible && fields.length >= 2) {
                 await this.fillFields(driver, fields.slice(-2), [user, pass])
-                return true
-            }
-            if (authVisible && fields.length === 2) {
-                await this.fillFields(driver, fields, [user, pass])
                 return true
             }
             await this.scrollDown(driver)

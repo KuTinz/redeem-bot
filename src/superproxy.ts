@@ -201,18 +201,33 @@ export class SuperProxyManager {
 
     private async fillAuthenticationFields(driver: AppiumDriver, user: string, pass: string): Promise<boolean> {
         for (let attempt = 0; attempt < 5; attempt += 1) {
-            const usernameField = await driver.findEditTextByText(['Username', 'username', 'User', 'user'])
-            const passwordField = await driver.findEditTextByText(['Password', 'password'])
-            if (usernameField && passwordField) {
-                await this.fillField(driver, usernameField, user)
-                const passwordFieldAfterUsername = await driver.findEditTextByText(['Password', 'password'])
-                if (!passwordFieldAfterUsername) return false
-                await this.fillField(driver, passwordFieldAfterUsername, pass)
+            const authFields = await this.findAuthenticationFields(driver)
+            if (authFields) {
+                await this.fillField(driver, authFields.username, user)
+                const authFieldsAfterUsername = await this.findAuthenticationFields(driver)
+                if (!authFieldsAfterUsername) return false
+                await this.fillField(driver, authFieldsAfterUsername.password, pass)
                 return true
             }
             await this.scrollDown(driver)
         }
         return false
+    }
+
+    private async findAuthenticationFields(driver: AppiumDriver): Promise<{ username: string; password: string } | null> {
+        const usernameField = await driver.findEditTextByText(['Username', 'username', 'User', 'user'])
+        const passwordField = await driver.findEditTextByText(['Password', 'password'])
+        if (usernameField && passwordField) return { username: usernameField, password: passwordField }
+
+        const source = (await driver.source()).toLowerCase()
+        const sourceWithoutMethod = source.replace(/username\s*\/\s*password/g, '')
+        const authFieldsVisible = sourceWithoutMethod.includes('username') && sourceWithoutMethod.includes('password')
+        if (!authFieldsVisible) return null
+
+        const fields = await driver.findAll('//android.widget.EditText')
+        if (fields.length < 2) return null
+        const [username, password] = fields.slice(-2)
+        return { username, password }
     }
 
     private async fillFields(driver: AppiumDriver, fields: string[], values: string[]): Promise<void> {

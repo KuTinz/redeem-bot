@@ -148,6 +148,28 @@ export class AppiumDriver {
         })
     }
 
+    async swipe(startX: number, startY: number, endX: number, endY: number): Promise<void> {
+        await this.request(`/session/${this.sessionId}/actions`, {
+            method: 'POST',
+            body: {
+                actions: [
+                    {
+                        type: 'pointer',
+                        id: 'finger1',
+                        parameters: { pointerType: 'touch' },
+                        actions: [
+                            { type: 'pointerMove', duration: 0, x: startX, y: startY },
+                            { type: 'pointerDown', button: 0 },
+                            { type: 'pause', duration: 100 },
+                            { type: 'pointerMove', duration: 450, x: endX, y: endY },
+                            { type: 'pointerUp', button: 0 },
+                        ],
+                    },
+                ],
+            },
+        })
+    }
+
     async windowRect(): Promise<{ width: number; height: number; x: number; y: number }> {
         const response = await this.request<AppiumWindowRectResponse>(`/session/${this.sessionId}/window/rect`)
         const rect = response.body.value || {}

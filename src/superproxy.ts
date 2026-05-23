@@ -31,6 +31,7 @@ export class SuperProxyManager {
 
         await this.adb.startPackage(serial, this.config.packages.superProxy)
         await sleep(3000)
+        await this.dismissStartupPrompts(driver)
 
         const added = await this.tryAddProxy(profileName, proxy, driver, log)
         if (!added) {
@@ -73,6 +74,7 @@ export class SuperProxyManager {
     }
 
     private async ensureProxyForm(driver: AppiumDriver, protocol: ProxyProtocol, log: StepLogger): Promise<boolean> {
+        await this.dismissStartupPrompts(driver)
         if (await this.hasProxyForm(driver)) {
             await this.selectProtocol(driver, protocol)
             return true
@@ -91,6 +93,15 @@ export class SuperProxyManager {
         return await this.hasProxyForm(driver)
     }
 
+    private async dismissStartupPrompts(driver: AppiumDriver): Promise<void> {
+        await driver.clickText(['Không h.lại', 'Không hiện lại', 'Do not show this warning again'])
+        await sleep(300)
+        await driver.clickText(['OK'])
+        await sleep(600)
+        await driver.clickText(['Cancel', 'Huỷ', 'Hủy'])
+        await sleep(300)
+    }
+
     private async hasProxyForm(driver: AppiumDriver): Promise<boolean> {
         const source = (await driver.source()).toLowerCase()
         const fields = await driver.findAll('//android.widget.EditText')
@@ -98,15 +109,36 @@ export class SuperProxyManager {
     }
 
     private async selectProtocol(driver: AppiumDriver, protocol: ProxyProtocol): Promise<void> {
+        const source = (await driver.source()).toLowerCase()
+        if (source.includes(`protocol`) && source.includes(protocol.toLowerCase())) return
         const labels =
             protocol === 'SOCKS5'
                 ? ['SOCKS5', 'Socks5', 'SOCKS', 'Socks']
                 : ['HTTP', 'Http']
-        if (await driver.clickText(labels)) {
-            await sleep(500)
-            await driver.clickText(labels)
-            await sleep(500)
-        }
+        if (!(await driver.clickText(labels))) return
+        await sleep(500)
+        await driver.clickText(labels)
+        await sleep(500)
+    }
+
+    private async selectAuthentication(driver: AppiumDriver, enabled: boolean): Promise<void> {
+        const source = (await driver.source()).toLowerCase()
+        if (!source.includes('authentication method')) return
+
+        const targetLabels = enabled ? ['Basic', 'User/password', 'Username/password', 'Password'] : ['None']
+        if (!(await driver.clickText(['None', 'Basic', 'Authentication method']))) return
+        await sleep(500)
+        await driver.clickText(targetLabels)
+        await sleep(700)
+    }
+
+    private async scrollDown(driver: AppiumDriver): Promise<void> {
+        const rect = await driver.windowRect()
+        const x = rect.x + Math.floor(rect.width * 0.5)
+        const y1 = rect.y + Math.floor(rect.height * 0.78)
+        const y2 = rect.y + Math.floor(rect.height * 0.38)
+        await driver.swipe(x, y1, x, y2)
+        await sleep(700)
     }
 
     private async fillProxyForm(
@@ -119,21 +151,27 @@ export class SuperProxyManager {
             pass: string
         },
     ): Promise<boolean> {
+        await this.selectAuthentication(driver, Boolean(values.user || values.pass))
         const fields = await driver.findAll('//android.widget.EditText')
         if (fields.length < 3) return false
 
-        const orderedValues = fields.length >= 5
-            ? [values.name, values.host, values.port, values.user, values.pass]
-            : [values.host, values.port, values.user, values.pass]
+        await this.fillFields(driver, fields.slice(0, 3), [values.name, values.host, values.port])
+        if (values.user || values.pass) {
+            await this.scrollDown(driver)
+            const authFields = await driver.findAll('//android.widget.EditText')
+            if (authFields.length >= 2) await this.fillFields(driver, authFields.slice(-2), [values.user, values.pass])
+        }
+        return true
+    }
 
-        for (let index = 0; index < Math.min(fields.length, orderedValues.length); index += 1) {
+    private async fillFields(driver: AppiumDriver, fields: string[], values: string[]): Promise<void> {
+        for (let index = 0; index < Math.min(fields.length, values.length); index += 1) {
             await driver.click(fields[index])
             await driver.clear(fields[index])
-            if (orderedValues[index]) await driver.type(fields[index], orderedValues[index])
+            if (values[index]) await driver.type(fields[index], values[index])
             await driver.hideKeyboard()
             await sleep(250)
         }
-        return true
     }
 
     private async saveProxyForm(driver: AppiumDriver): Promise<void> {

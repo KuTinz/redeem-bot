@@ -150,15 +150,23 @@ export class SuperProxyManager {
         await sleep(500)
     }
 
-    private async selectAuthentication(driver: AppiumDriver, enabled: boolean): Promise<void> {
-        const source = (await driver.source()).toLowerCase()
-        if (!source.includes('authentication method')) return
+    private async selectAuthentication(driver: AppiumDriver, enabled: boolean): Promise<boolean> {
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+            const source = (await driver.source()).toLowerCase()
+            if (source.includes('authentication method')) {
+                if (enabled && source.includes('basic')) return true
+                if (!enabled && source.includes('none')) return true
 
-        const targetLabels = enabled ? ['Basic', 'User/password', 'Username/password', 'Password'] : ['None']
-        if (!(await driver.clickText(['None', 'Basic', 'Authentication method']))) return
-        await sleep(500)
-        await driver.clickText(targetLabels)
-        await sleep(700)
+                const targetLabels = enabled ? ['Basic', 'User/password', 'Username/password', 'Password'] : ['None']
+                if (!(await driver.clickText(['None', 'Basic', 'Authentication method']))) return false
+                await sleep(500)
+                await driver.clickText(targetLabels)
+                await sleep(700)
+                return true
+            }
+            await this.scrollDown(driver)
+        }
+        return false
     }
 
     private async scrollDown(driver: AppiumDriver): Promise<void> {
@@ -180,17 +188,33 @@ export class SuperProxyManager {
             pass: string
         },
     ): Promise<boolean> {
-        await this.selectAuthentication(driver, Boolean(values.user || values.pass))
         const fields = await driver.findAll('//android.widget.EditText')
         if (fields.length < 3) return false
 
         await this.fillFields(driver, fields.slice(0, 3), [values.name, values.host, values.port])
         if (values.user || values.pass) {
-            await this.scrollDown(driver)
-            const authFields = await driver.findAll('//android.widget.EditText')
-            if (authFields.length >= 2) await this.fillFields(driver, authFields.slice(-2), [values.user, values.pass])
+            if (!(await this.selectAuthentication(driver, true))) return false
+            if (!(await this.fillAuthenticationFields(driver, values.user, values.pass))) return false
         }
         return true
+    }
+
+    private async fillAuthenticationFields(driver: AppiumDriver, user: string, pass: string): Promise<boolean> {
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+            const source = (await driver.source()).toLowerCase()
+            const fields = await driver.findAll('//android.widget.EditText')
+            const authVisible = source.includes('user') || source.includes('password')
+            if (authVisible && fields.length >= 5) {
+                await this.fillFields(driver, fields.slice(-2), [user, pass])
+                return true
+            }
+            if (authVisible && fields.length === 2) {
+                await this.fillFields(driver, fields, [user, pass])
+                return true
+            }
+            await this.scrollDown(driver)
+        }
+        return false
     }
 
     private async fillFields(driver: AppiumDriver, fields: string[], values: string[]): Promise<void> {

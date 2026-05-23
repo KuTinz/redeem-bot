@@ -115,6 +115,23 @@ export class RedeemAutomation {
             log('processing', 'Opening Bing app redeem verification link')
             await adb.openUrl(instance.serial, payload.urlRedem, this.config.packages.bing)
             await sleep(3500)
+            const verifyLoginResult = await this.withAppiumRetry(
+                driver,
+                liveSerial,
+                'Bing redeem sign in',
+                retryDriver => bestEffortBingLogin(retryDriver, payload.email, payload.pass, payload.totpSecret, log),
+                log,
+            )
+            driver = verifyLoginResult.driver
+            if (!verifyLoginResult.value) {
+                await this.pauseForManual(
+                    task,
+                    'Bing redeem sign-in needs manual recovery in LDPlayer. Complete login, then Resume in viewer.',
+                    this.config.queue.manualTimeoutMs,
+                )
+                if (this.finished(task)) return
+            }
+
             let code = await this.solveCaptcha(task, payload.captcha, log)
             if (!code) {
                 this.store.status(

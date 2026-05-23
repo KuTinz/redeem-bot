@@ -197,8 +197,19 @@ export class AppiumDriver {
     }
 
     async clickText(labels: string[]): Promise<boolean> {
+        if (await this.clickExactText(labels)) return true
         for (const label of labels) {
             const id = await this.find(textXpath(label))
+            if (!id) continue
+            await this.click(id)
+            return true
+        }
+        return false
+    }
+
+    async clickExactText(labels: string[]): Promise<boolean> {
+        for (const label of labels) {
+            const id = await this.find(exactTextXpath(label))
             if (!id) continue
             await this.click(id)
             return true
@@ -252,40 +263,64 @@ export async function bestEffortBingLogin(
     totpSecret: string | undefined,
     log: StepLogger,
 ): Promise<boolean> {
-    await driver.clickText(['Sign in', 'Sign In', 'Login', 'Log in'])
-    await sleep(1500)
+    await dismissBingStartup(driver)
 
-    const sourceBefore = await driver.source()
-    if (!mentionsAny(sourceBefore, ['Sign in', 'Enter password', 'Email', 'Microsoft'])) {
-        log('success', 'Bing login prompt not visible; reusing existing app session')
-        return true
-    }
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+        const source = await driver.source()
+        if (isRedeemCodeScreen(source)) {
+            log('success', 'Bing redeem verification screen is ready')
+            return true
+        }
+        if (!isMicrosoftLoginPrompt(source)) {
+            log('success', 'Bing login prompt not visible; reusing existing app session')
+            return true
+        }
 
-    const emailField = await driver.waitForEditText(8000)
-    if (emailField && email) {
-        await driver.clear(emailField)
-        await driver.type(emailField, email)
-        await driver.clickText(['Next', 'Continue'])
-        log('processing', 'Submitted Microsoft account email in Bing app')
-        await sleep(2500)
-    }
+        if (mentionsAny(source, ['Use your password', 'Use password', 'Send code'])) {
+            await clickUsePassword(driver)
+            await sleep(1500)
+            continue
+        }
 
-    const passwordField = await driver.waitForEditText(8000)
-    if (passwordField && password) {
-        await driver.clear(passwordField)
-        await driver.type(passwordField, password)
-        await driver.clickText(['Sign in', 'Next', 'Continue'])
-        log('processing', 'Submitted Microsoft account password in Bing app')
-        await sleep(3500)
+        if (mentionsAny(source, ['password']) && password) {
+            const passwordField = await driver.waitForEditText(8000)
+            if (passwordField) {
+                await driver.clear(passwordField)
+                await driver.type(passwordField, password)
+                await driver.clickExactText(['Sign in', 'Next', 'Continue'])
+                log('processing', 'Submitted Microsoft account password in Bing app')
+                await sleep(3500)
+                continue
+            }
+        }
+
+        if (mentionsAny(source, ['email', 'phone', 'skype']) && email) {
+            const emailField = await driver.waitForEditText(8000)
+            if (emailField) {
+                await driver.clear(emailField)
+                await driver.type(emailField, email)
+                await driver.clickExactText(['Next', 'Continue'])
+                log('processing', 'Submitted Microsoft account email in Bing app')
+                await sleep(2500)
+                continue
+            }
+        }
+
+        if (await clickMicrosoftSignIn(driver)) {
+            await sleep(1800)
+            continue
+        }
+
+        break
     }
 
     const afterPassword = await driver.source()
-    if (totpSecret && mentionsAny(afterPassword, ['code', 'verification', 'Authenticator', 'Verify'])) {
+    if (totpSecret && mentionsAny(afterPassword, ['authenticator', 'two-step', 'two step', 'approve sign in'])) {
         const otpField = await driver.waitForEditText(4000)
         if (otpField) {
             await driver.clear(otpField)
             await driver.type(otpField, totp(totpSecret))
-            await driver.clickText(['Verify', 'Next', 'Continue'])
+            await driver.clickExactText(['Verify', 'Next', 'Continue'])
             log('processing', 'Submitted TOTP in Bing app')
             await sleep(3000)
         }
@@ -298,6 +333,25 @@ export async function bestEffortBingLogin(
     }
     log('success', 'Bing login best-effort flow finished')
     return true
+}
+
+async function dismissBingStartup(driver: AppiumDriver): Promise<void> {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+        const clicked = await driver.clickExactText(['Maybe later', 'Not now', 'Skip', 'Continue without sign in', 'Later'])
+        if (!clicked) break
+        await sleep(1000)
+    }
+}
+
+async function clickMicrosoftSignIn(driver: AppiumDriver): Promise<boolean> {
+    if (await driver.clickExactText(['Sign in', 'Sign In', 'Login', 'Log in'])) return true
+    const source = await driver.source()
+    if (!mentionsAny(source, ['Sign in to verify'])) return false
+    return await driver.clickText(['Sign in'])
+}
+
+async function clickUsePassword(driver: AppiumDriver): Promise<boolean> {
+    return await driver.clickExactText(['Use your password', 'Use password', 'Use your Password'])
 }
 
 export async function enterVerificationCode(driver: AppiumDriver, code: string, log: StepLogger): Promise<boolean> {
@@ -319,6 +373,11 @@ function textXpath(label: string): string {
     return `//*[contains(@text, ${literal}) or contains(@content-desc, ${literal})]`
 }
 
+function exactTextXpath(label: string): string {
+    const literal = xpathLiteral(label)
+    return `//*[@text = ${literal} or @content-desc = ${literal}]`
+}
+
 function xpathLiteral(value: string): string {
     if (!value.includes("'")) return `'${value}'`
     if (!value.includes('"')) return `"${value}"`
@@ -328,4 +387,24 @@ function xpathLiteral(value: string): string {
 function mentionsAny(source: string, terms: string[]): boolean {
     const lower = source.toLowerCase()
     return terms.some(term => lower.includes(term.toLowerCase()))
+}
+
+function isMicrosoftLoginPrompt(source: string): boolean {
+    return mentionsAny(source, [
+        'sign in to verify',
+        'sign in',
+        'enter password',
+        'use your password',
+        'send code',
+        'email',
+        'phone',
+        'skype',
+    ])
+}
+
+function isRedeemCodeScreen(source: string): boolean {
+    return (
+        mentionsAny(source, ['six digit', 'six-digit', '6 digit', '6-digit']) ||
+        (mentionsAny(source, ['verification code', 'security code']) && !isMicrosoftLoginPrompt(source))
+    )
 }

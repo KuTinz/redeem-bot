@@ -107,7 +107,7 @@ export function viewerPage(): string {
             detail.innerHTML =
                 '<div class="meta"><div>Id: ' + esc(task.id) + '</div><div>Profile: ' + esc(task.profileName || '-') + '</div><div>Device: ' + esc(task.deviceSerial || '-') + '</div><div>' + esc(task.manualReason || '') + '</div></div>' +
                 captcha +
-                '<div class="row"><input id="code" inputmode="numeric" maxlength="6" placeholder="6 digit"><button class="good" id="sendCode">Send code</button><button id="resume">Resume</button><button class="good" id="done">Done</button><button class="fail" id="fail">Fail</button><button class="fail" id="cancel">Cancel</button></div>' +
+                '<div class="row"><input id="code" inputmode="text" maxlength="6" placeholder="6 chars"><button class="good" id="sendCode">Send code</button><button id="resume">Resume</button><button class="good" id="done">Done</button><button class="fail" id="fail">Fail</button><button class="fail" id="cancel">Cancel</button></div>' +
                 '<ul class="logs">' + logs + '</ul>';
             document.getElementById('sendCode').onclick = () => action('code', { code: document.getElementById('code').value });
             document.getElementById('resume').onclick = () => action('resume', {});

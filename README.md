@@ -57,7 +57,7 @@ Set `proxyApp` to `superproxy` and put Super Proxy at `apks/superproxy.apk` to
 use Super Proxy for HTTP/SOCKS routing. Leave `proxyApp` as `v2rayng` to use
 the older v2rayNG flow.
 
-To auto-solve the six digit image captcha, set `captcha.provider` to
+To auto-solve the six character image captcha, set `captcha.provider` to
 `2captcha` and put your 2Captcha API key in `captcha.apiKey`. If captcha
 solving fails or is not configured, the task falls back to manual code entry in
 `/viewer`.
@@ -91,7 +91,7 @@ dashboard `Redeem API Key`.
   v2rayNG flow.
 - If the proxy app UI labels differ, the task pauses in viewer for manual proxy setup/connect.
 - Server opens the Bing verification link in the Android profile.
-- Open `/viewer`, read the captcha image from the task, and send the six digit
+- Open `/viewer`, read the captcha image from the task, and send the six character
   code. The server types it into Bing when Appium finds the code field.
 - When the task reports `done`, the original browser session continues waiting
   for Rewards `Next` and keeps its existing order-history/gift-link flow.
@@ -99,7 +99,7 @@ dashboard `Redeem API Key`.
 ## Viewer
 
 Open `/viewer` on the Redeem Server host. Enter the same API key used by the
-dashboard. The viewer shows queue status, logs, captcha image, six digit code
+dashboard. The viewer shows queue status, logs, captcha image, six character code
 input, Resume, Done, Fail, and Cancel controls.
 
 Use `Resume` after fixing a paused proxy setup or Bing login manually in
@@ -173,7 +173,7 @@ viewer but does not run phone redemption automation yet.
 - Proxy app add/connect is best effort because it depends on the installed app
   version and UI language.
 - The captcha is an image from the Rewards browser challenge. The server can
-  send it to 2Captcha when configured; otherwise the viewer sends the six digit
+  send it to 2Captcha when configured; otherwise the viewer sends the six character
   code to Appium.
 - The Bing login automation is selector based and pauses for manual recovery
   when Microsoft shows an unexpected approval, recovery, or risk screen.

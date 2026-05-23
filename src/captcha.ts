@@ -11,6 +11,7 @@ interface TwoCaptchaResponse {
 
 export class CaptchaSolver {
     private readonly config: RedeemServerConfig['captcha']
+    private readonly maxAttempts = 3
 
     constructor(config: RedeemServerConfig) {
         this.config = config.captcha
@@ -28,24 +29,52 @@ export class CaptchaSolver {
             return null
         }
 
-        log('processing', 'Submitting captcha image to 2Captcha')
+        let lastInvalidCode = ''
+        for (let attempt = 1; attempt <= this.maxAttempts; attempt += 1) {
+            log('processing', `Submitting captcha image to 2Captcha (attempt ${attempt}/${this.maxAttempts})`)
+            const captchaId = await this.submitImage(body)
+
+            const code = await this.pollResult(captchaId)
+            if (!code) throw new Error(`2Captcha timed out after ${this.config.timeoutMs}ms`)
+            const normalized = normalizeVerificationCode(code)
+            if (isVerificationCode(normalized)) {
+                log('success', '2Captcha returned a six character code')
+                return normalized
+            }
+
+            lastInvalidCode = code
+            log('processing', `2Captcha returned invalid code '${code}'; reporting bad and retrying`)
+            await this.reportBad(captchaId)
+        }
+
+        throw new Error(`2Captcha returned invalid code after ${this.maxAttempts} attempts: ${lastInvalidCode}`)
+    }
+
+    private async submitImage(body: string): Promise<string> {
         const submit = await this.postForm<TwoCaptchaResponse>('/in.php', {
             key: this.config.apiKey,
             method: 'base64',
             body,
-            numeric: '1',
+            regsense: '1',
             min_len: '6',
             max_len: '6',
             json: '1',
         })
         if (submit.status !== 1 || !submit.request) throw new Error(`2Captcha submit failed: ${submit.request || 'empty response'}`)
+        return submit.request
+    }
 
-        const code = await this.pollResult(submit.request)
-        if (!code) throw new Error(`2Captcha timed out after ${this.config.timeoutMs}ms`)
-        const digits = code.replace(/\D+/g, '')
-        if (!/^\d{6}$/.test(digits)) throw new Error(`2Captcha returned invalid code: ${code}`)
-        log('success', '2Captcha returned a six digit code')
-        return digits
+    private async reportBad(id: string): Promise<void> {
+        try {
+            await this.getJson<TwoCaptchaResponse>('/res.php', {
+                key: this.config.apiKey,
+                action: 'reportbad',
+                id,
+                json: '1',
+            })
+        } catch {
+            // Reporting bad solves is best effort; the next attempt is more important.
+        }
     }
 
     private async pollResult(id: string): Promise<string | null> {
@@ -124,4 +153,12 @@ function base64Body(captcha: string): string | null {
     const trimmed = captcha.trim()
     const match = trimmed.match(/^data:image\/[^;]+;base64,(.+)$/i)
     return match ? match[1] : trimmed || null
+}
+
+function normalizeVerificationCode(code: string): string {
+    return code.replace(/\s+/g, '').trim()
+}
+
+function isVerificationCode(code: string): boolean {
+    return /^[a-z0-9]{6}$/i.test(code)
 }

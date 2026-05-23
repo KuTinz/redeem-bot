@@ -152,8 +152,8 @@ export class RedeemAutomation {
                     task,
                     'waiting_code',
                     payload.captcha
-                        ? 'Waiting for six digit code from viewer; captcha image is attached to task.'
-                        : 'Waiting for six digit code from viewer.',
+                        ? 'Waiting for six character code from viewer; captcha image is attached to task.'
+                        : 'Waiting for six character code from viewer.',
                 )
                 code = await this.waitForCode(task, this.config.queue.codeTimeoutMs)
             }

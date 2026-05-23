@@ -489,12 +489,19 @@ async function tapMicrosoftAuthFallback(driver: AppiumDriver, attempt: number): 
 }
 
 export async function enterVerificationCode(driver: AppiumDriver, code: string, log: StepLogger): Promise<boolean> {
-    const input = await waitForRedeemCodeEditText(driver, 10000)
-    if (!input) return false
-    await driver.clear(input)
-    await driver.type(input, code)
+    const inputs = await waitForRedeemCodeEditTexts(driver, 10000)
+    if (!inputs.length) return false
+    if (inputs.length >= code.length) {
+        for (let index = 0; index < code.length; index += 1) {
+            await driver.clear(inputs[index])
+            await driver.type(inputs[index], code[index])
+        }
+    } else {
+        await driver.clear(inputs[0])
+        await driver.type(inputs[0], code)
+    }
     await driver.clickText(['Verify', 'Next', 'Continue', 'Submit'])
-    log('success', 'Submitted six digit Bing verification code')
+    log('success', 'Submitted six character Bing verification code')
     return true
 }
 
@@ -565,17 +572,17 @@ async function waitForPasswordEditText(driver: AppiumDriver, timeoutMs: number):
     return null
 }
 
-async function waitForRedeemCodeEditText(driver: AppiumDriver, timeoutMs: number): Promise<string | null> {
+async function waitForRedeemCodeEditTexts(driver: AppiumDriver, timeoutMs: number): Promise<string[]> {
     const start = Date.now()
     while (Date.now() - start < timeoutMs) {
         const source = await driver.source()
         if (isRedeemCodeScreen(source)) {
-            const firstField = await driver.firstEditText()
-            if (firstField) return firstField
+            const fields = await driver.findAll('//android.widget.EditText')
+            if (fields.length) return fields
         }
         await sleep(1000)
     }
-    return null
+    return []
 }
 
 function isMicrosoftLoginPrompt(source: string): boolean {

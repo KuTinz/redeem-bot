@@ -73,10 +73,10 @@ export class TaskStore {
 
     setCode(task: TaskRecord, code: string): void {
         const trimmed = code.replace(/\s+/g, '')
-        if (!/^\d{6}$/.test(trimmed)) throw new Error('Verification code must contain exactly six digits')
+        if (!/^[a-z0-9]{6}$/i.test(trimmed)) throw new Error('Verification code must contain exactly six letters or numbers')
         task.verificationCode = trimmed
         task.resumeRequested = true
-        this.status(task, 'processing', 'Viewer supplied a six digit Bing verification code')
+        this.status(task, 'processing', 'Viewer supplied a six character Bing verification code')
     }
 
     resume(task: TaskRecord): void {

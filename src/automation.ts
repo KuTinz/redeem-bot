@@ -2,7 +2,7 @@ import { AdbClient } from './adb.js'
 import { AppiumClient, AppiumDriver, bestEffortBingLogin, enterVerificationCode } from './appium.js'
 import { CaptchaSolver } from './captcha.js'
 import { RedeemServerConfig } from './config.js'
-import { LdPlayerManager } from './ldplayer.js'
+import { LdPlayerManager, type LdInstance } from './ldplayer.js'
 import { SuperProxyManager } from './superproxy.js'
 import { TaskStore } from './tasks.js'
 import { RedeemPayload, StepLogger, TaskRecord } from './types.js'
@@ -35,10 +35,11 @@ export class RedeemAutomation {
         const log: StepLogger = (status, message) => this.store.log(task, status, message)
         this.store.status(task, 'processing', `Starting redeem automation for ${payload.email}`)
         const adb = new AdbClient(await this.ldplayer.resolveAdbPath())
+        let instance: LdInstance | null = null
         let driver: AppiumDriver | null = null
 
         try {
-            const instance = await this.ldplayer.ensureProfile(payload.email, adb, log)
+            instance = await this.ldplayer.ensureProfile(payload.email, adb, log)
             task.profileName = instance.profileName
             task.deviceSerial = instance.serial
             log('success', `Using LDPlayer profile ${instance.profileName} on ${instance.serial}`)
@@ -187,6 +188,9 @@ export class RedeemAutomation {
             this.store.status(task, 'done', 'Redeem verification code submitted to Bing app', 'done')
         } finally {
             await driver?.close().catch(() => undefined)
+            if (instance && task.status === 'done') {
+                await this.cleanupCompletedTask(adb, instance, log)
+            }
         }
     }
 
@@ -216,6 +220,33 @@ export class RedeemAutomation {
 
     private proxyManager(adb: AdbClient): V2rayNgManager | SuperProxyManager {
         return this.config.proxyApp === 'superproxy' ? new SuperProxyManager(this.config, adb) : new V2rayNgManager(this.config, adb)
+    }
+
+    private async cleanupCompletedTask(adb: AdbClient, instance: LdInstance, log: StepLogger): Promise<void> {
+        log('processing', `Cleaning up completed task on LDPlayer profile ${instance.profileName}`)
+        await adb.inputKeyEvent(instance.serial, 3).catch(error => {
+            log('processing', `Cleanup home key failed: ${asErrorMessage(error)}`)
+        })
+
+        const packages = [
+            this.config.packages.bing,
+            this.config.proxyApp === 'superproxy' ? this.config.packages.superProxy : this.config.packages.v2rayng,
+            this.config.packages.appiumSettings,
+        ]
+        for (const packageName of packages) {
+            await adb.forceStop(instance.serial, packageName).catch(error => {
+                log('processing', `Cleanup force-stop ${packageName} failed: ${asErrorMessage(error)}`)
+            })
+        }
+
+        await this.ldplayer
+            .quitProfile(instance)
+            .then(() => {
+                log('success', `LDPlayer profile ${instance.profileName} closed after completed task`)
+            })
+            .catch(error => {
+                log('processing', `Cleanup could not close LDPlayer profile ${instance.profileName}: ${asErrorMessage(error)}`)
+            })
     }
 
     private async recoverBingRedeemSignInWithAdb(

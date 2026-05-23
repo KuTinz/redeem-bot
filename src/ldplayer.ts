@@ -92,6 +92,15 @@ export class LdPlayerManager {
             }))
     }
 
+    async quitProfile(instance: Pick<LdInstance, 'profileName' | 'index'>): Promise<void> {
+        try {
+            await this.run(['quit', '--name', instance.profileName])
+            return
+        } catch {
+            await this.run(['quit', '--index', String(instance.index)])
+        }
+    }
+
     private async waitForSerial(profile: LdProfile, adb: AdbClient): Promise<string> {
         const configured = this.config.ldplayer.serialByProfile[profile.name]
         if (configured) return configured

@@ -110,6 +110,10 @@ export class AdbClient {
         await this.run(await this.resolveLiveSerial(serial), ['shell', 'input', 'tap', String(x), String(y)], true)
     }
 
+    async inputKeyEvent(serial: string, keyCode: string | number): Promise<void> {
+        await this.run(await this.resolveLiveSerial(serial), ['shell', 'input', 'keyevent', String(keyCode)], true)
+    }
+
     async tapRatio(serial: string, xRatio: number, yRatio: number): Promise<void> {
         const size = await this.screenSize(serial)
         await this.inputTap(serial, Math.floor(size.width * xRatio), Math.floor(size.height * yRatio))

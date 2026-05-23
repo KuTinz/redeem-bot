@@ -106,6 +106,25 @@ export class AdbClient {
         await this.run(liveSerial, args, false)
     }
 
+    async inputTap(serial: string, x: number, y: number): Promise<void> {
+        await this.run(await this.resolveLiveSerial(serial), ['shell', 'input', 'tap', String(x), String(y)], true)
+    }
+
+    async tapRatio(serial: string, xRatio: number, yRatio: number): Promise<void> {
+        const size = await this.screenSize(serial)
+        await this.inputTap(serial, Math.floor(size.width * xRatio), Math.floor(size.height * yRatio))
+    }
+
+    async screenSize(serial: string): Promise<{ width: number; height: number }> {
+        const result = await this.run(await this.resolveLiveSerial(serial), ['shell', 'wm', 'size'], true)
+        const match = `${result.stdout}\n${result.stderr}`.match(/Physical size:\s*(\d+)x(\d+)/i)
+        if (!match) return { width: 540, height: 960 }
+        return {
+            width: Number.parseInt(match[1], 10),
+            height: Number.parseInt(match[2], 10),
+        }
+    }
+
     async forceStop(serial: string, packageName: string): Promise<void> {
         await this.run(await this.resolveLiveSerial(serial), ['shell', 'am', 'force-stop', packageName], true)
     }

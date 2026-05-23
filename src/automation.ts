@@ -125,7 +125,19 @@ export class RedeemAutomation {
                 log,
             )
             driver = verifyLoginResult.driver
-            if (!verifyLoginResult.value) {
+            let redeemLoginReady = verifyLoginResult.value
+            if (!redeemLoginReady) {
+                const adbRecoveryResult = await this.recoverBingRedeemSignInWithAdb(
+                    adb,
+                    driver,
+                    liveSerial,
+                    payload,
+                    log,
+                )
+                driver = adbRecoveryResult.driver
+                redeemLoginReady = adbRecoveryResult.value
+            }
+            if (!redeemLoginReady) {
                 await this.pauseForManual(
                     task,
                     'Bing redeem sign-in needs manual recovery in LDPlayer. Complete login, then Resume in viewer.',
@@ -204,6 +216,42 @@ export class RedeemAutomation {
 
     private proxyManager(adb: AdbClient): V2rayNgManager | SuperProxyManager {
         return this.config.proxyApp === 'superproxy' ? new SuperProxyManager(this.config, adb) : new V2rayNgManager(this.config, adb)
+    }
+
+    private async recoverBingRedeemSignInWithAdb(
+        adb: AdbClient,
+        driver: AppiumDriver,
+        serial: string,
+        payload: RedeemPayload,
+        log: StepLogger,
+    ): Promise<{ driver: AppiumDriver; value: boolean }> {
+        log('processing', 'Bing password option was not selectable by Appium; trying ADB tap recovery')
+        const tapPoints = [
+            [0.5, 0.68],
+            [0.5, 0.66],
+            [0.5, 0.7],
+            [0.5, 0.64],
+            [0.5, 0.72],
+        ]
+        let currentDriver = driver
+        for (let index = 0; index < tapPoints.length; index += 1) {
+            const [xRatio, yRatio] = tapPoints[index]
+            await adb.tapRatio(serial, xRatio, yRatio)
+            log('processing', `ADB tapped Microsoft password option area (${index + 1}/${tapPoints.length})`)
+            await sleep(1600)
+            const result = await this.withAppiumRetry(
+                currentDriver,
+                serial,
+                'Bing redeem sign in after ADB tap',
+                retryDriver => bestEffortBingLogin(retryDriver, payload.email, payload.pass, payload.totpSecret, log, {
+                    requireRedeemCodeScreen: true,
+                }),
+                log,
+            )
+            currentDriver = result.driver
+            if (result.value) return { driver: currentDriver, value: true }
+        }
+        return { driver: currentDriver, value: false }
     }
 
     private async withAppiumRetry<T>(

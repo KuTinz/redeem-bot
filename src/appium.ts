@@ -351,16 +351,16 @@ export async function bestEffortBingLogin(
 
         const passwordEntryVisible = isPasswordEntryPrompt(source)
         const passwordChoiceVisible =
-            mentionsAny(source, ['Use your password', 'Use password']) ||
-            (mentionsAny(source, ['Send code', 'Get a code to sign in']) && !passwordEntryVisible)
+            mentionsUiAny(source, ['Use your password', 'Use password']) ||
+            (mentionsUiAny(source, ['Send code', 'Get a code to sign in']) && !passwordEntryVisible)
         if (passwordChoiceVisible) {
             if (await choosePasswordLogin(driver, log)) touchedLoginUi = true
             await sleep(1500)
             continue
         }
 
-        if (mentionsAny(source, ['password']) && password) {
-            const passwordField = await driver.waitForEditText(8000)
+        if (isPasswordEntryPrompt(source) && password) {
+            const passwordField = await waitForPasswordEditText(driver, 8000)
             if (passwordField) {
                 await driver.clear(passwordField)
                 await driver.type(passwordField, password)
@@ -395,7 +395,7 @@ export async function bestEffortBingLogin(
     }
 
     const afterPassword = await driver.source()
-    if (totpSecret && mentionsAny(afterPassword, ['authenticator', 'two-step', 'two step', 'approve sign in'])) {
+    if (totpSecret && mentionsUiAny(afterPassword, ['authenticator', 'two-step', 'two step', 'approve sign in'])) {
         const otpField = await driver.waitForEditText(4000)
         if (otpField) {
             await driver.clear(otpField)
@@ -408,7 +408,7 @@ export async function bestEffortBingLogin(
 
     await driver.clickText(['Yes', 'OK', 'Continue', 'Accept'])
     const finalSource = await driver.source()
-    if (mentionsAny(finalSource, ['wrong password', 'try again', 'Help us protect', 'Approve sign in request'])) {
+    if (mentionsUiAny(finalSource, ['wrong password', 'try again', 'Help us protect', 'Approve sign in request'])) {
         return false
     }
     if (options.requireRedeemCodeScreen && !isRedeemCodeScreen(finalSource)) {
@@ -466,7 +466,7 @@ async function choosePasswordLogin(driver: AppiumDriver, log: StepLogger, coordi
             log('processing', 'Selected Microsoft password sign-in option')
             return true
         }
-        if (!mentionsAny(sourceAfterTap, ['Use your password', 'Use password', 'Send code', 'Get a code to sign in'])) return true
+        if (!mentionsUiAny(sourceAfterTap, ['Use your password', 'Use password', 'Send code', 'Get a code to sign in'])) return true
     }
     log('processing', 'Microsoft password sign-in option was visible but did not open password entry')
     return true
@@ -489,7 +489,7 @@ async function tapMicrosoftAuthFallback(driver: AppiumDriver, attempt: number): 
 }
 
 export async function enterVerificationCode(driver: AppiumDriver, code: string, log: StepLogger): Promise<boolean> {
-    const input = await driver.waitForEditText(10000)
+    const input = await waitForRedeemCodeEditText(driver, 10000)
     if (!input) return false
     await driver.clear(input)
     await driver.type(input, code)
@@ -523,13 +523,67 @@ function mentionsAny(source: string, terms: string[]): boolean {
     return terms.some(term => lower.includes(term.toLowerCase()))
 }
 
+function mentionsUiAny(source: string, terms: string[]): boolean {
+    return mentionsAny(searchableUiText(source), terms)
+}
+
+function searchableUiText(source: string): string {
+    const values: string[] = []
+    const attributePattern = /\b(?:text|hint|content-desc|resource-id)="([^"]*)"/gi
+    let match: RegExpExecArray | null
+    while ((match = attributePattern.exec(source))) {
+        if (match[1]) values.push(unescapeXml(match[1]))
+    }
+    return values.join('\n')
+}
+
+function unescapeXml(value: string): string {
+    return value
+        .replace(/&quot;/g, '"')
+        .replace(/&apos;/g, "'")
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&amp;/g, '&')
+}
+
+async function waitForPasswordEditText(driver: AppiumDriver, timeoutMs: number): Promise<string | null> {
+    const start = Date.now()
+    while (Date.now() - start < timeoutMs) {
+        const source = await driver.source()
+        if (isRedeemCodeScreen(source)) return null
+
+        const labeledField = await driver.findEditTextByText(['Password', 'password', 'Enter your password', 'Enter password'])
+        if (labeledField) return labeledField
+
+        if (hasPasswordEditText(source)) {
+            const firstField = await driver.firstEditText()
+            if (firstField) return firstField
+        }
+
+        await sleep(1000)
+    }
+    return null
+}
+
+async function waitForRedeemCodeEditText(driver: AppiumDriver, timeoutMs: number): Promise<string | null> {
+    const start = Date.now()
+    while (Date.now() - start < timeoutMs) {
+        const source = await driver.source()
+        if (isRedeemCodeScreen(source)) {
+            const firstField = await driver.firstEditText()
+            if (firstField) return firstField
+        }
+        await sleep(1000)
+    }
+    return null
+}
+
 function isMicrosoftLoginPrompt(source: string): boolean {
-    return mentionsAny(source, [
+    return hasPasswordEditText(source) || mentionsUiAny(source, [
         'sign in to verify',
         'sign in',
         'enter your password',
         'enter password',
-        'password',
         'use your password',
         'get a code to sign in',
         'send code',
@@ -540,12 +594,16 @@ function isMicrosoftLoginPrompt(source: string): boolean {
 }
 
 function isPasswordEntryPrompt(source: string): boolean {
-    return mentionsAny(source, ['enter your password', 'enter password', 'password'])
+    return hasPasswordEditText(source) || mentionsUiAny(source, ['enter your password', 'enter password'])
 }
 
 function isRedeemCodeScreen(source: string): boolean {
     return (
-        mentionsAny(source, ['six digit', 'six-digit', '6 digit', '6-digit']) ||
-        (mentionsAny(source, ['verification code', 'security code']) && !isMicrosoftLoginPrompt(source))
+        mentionsUiAny(source, ['six digit', 'six-digit', '6 digit', '6-digit']) ||
+        (mentionsUiAny(source, ['verification code', 'security code']) && !isMicrosoftLoginPrompt(source))
     )
+}
+
+function hasPasswordEditText(source: string): boolean {
+    return /<android\.widget\.EditText\b[^>]*\bpassword="true"/i.test(source) || /class="android\.widget\.EditText"[^>]*\bpassword="true"/i.test(source) || /password="true"[^>]*class="android\.widget\.EditText"/i.test(source)
 }

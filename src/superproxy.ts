@@ -109,6 +109,20 @@ export class SuperProxyManager {
         await sleep(500)
         await driver.tap(rect.x + Math.floor(rect.width * 0.72), rect.y + Math.floor(rect.height * 0.94))
         await sleep(800)
+        await this.acceptWarningIfPresent(driver)
+    }
+
+    private async acceptWarningIfPresent(driver: AppiumDriver): Promise<void> {
+        const source = (await driver.source()).toLowerCase()
+        if (!source.includes('warning') && !source.includes('do not use this app')) return
+
+        await driver.clickText(['Do not show this warning again'])
+        await sleep(6000)
+        if (await driver.clickText(['OK'])) return
+
+        const rect = await driver.windowRect()
+        await driver.tap(rect.x + Math.floor(rect.width * 0.74), rect.y + Math.floor(rect.height * 0.94))
+        await sleep(800)
     }
 
     private async hasProxyForm(driver: AppiumDriver): Promise<boolean> {

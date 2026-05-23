@@ -22,6 +22,8 @@ type AppiumWindowRectResponse = {
     }
 }
 
+type AppiumElementRectResponse = AppiumWindowRectResponse
+
 export class AppiumClient {
     private readonly baseUrl: string
     private readonly timeoutMs: number
@@ -181,6 +183,22 @@ export class AppiumDriver {
         }
     }
 
+    async elementRect(id: string): Promise<{ width: number; height: number; x: number; y: number } | null> {
+        try {
+            const response = await this.request<AppiumElementRectResponse>(`/session/${this.sessionId}/element/${id}/rect`)
+            const rect = response.body.value || {}
+            if (rect.width === undefined || rect.height === undefined || rect.x === undefined || rect.y === undefined) return null
+            return {
+                width: rect.width,
+                height: rect.height,
+                x: rect.x,
+                y: rect.y,
+            }
+        } catch {
+            return null
+        }
+    }
+
     async clear(id: string): Promise<void> {
         await this.request(`/session/${this.sessionId}/element/${id}/clear`, {
             method: 'POST',
@@ -212,6 +230,18 @@ export class AppiumDriver {
             const id = await this.find(exactTextXpath(label))
             if (!id) continue
             await this.click(id)
+            return true
+        }
+        return false
+    }
+
+    async tapTextCenter(labels: string[]): Promise<boolean> {
+        for (const label of labels) {
+            const id = (await this.find(exactTextXpath(label))) || (await this.find(textXpath(label)))
+            if (!id) continue
+            const rect = await this.elementRect(id)
+            if (!rect) continue
+            await this.tap(rect.x + Math.floor(rect.width / 2), rect.y + Math.floor(rect.height / 2))
             return true
         }
         return false
@@ -389,6 +419,16 @@ async function choosePasswordLogin(driver: AppiumDriver, log: StepLogger): Promi
             await sleep(1200)
             if (isPasswordEntryPrompt(await driver.source())) {
                 log('processing', 'Selected Microsoft password sign-in option by selector')
+                return true
+            }
+        }
+
+        const tappedTextCenter = await driver.tapTextCenter(labels)
+        if (tappedTextCenter) {
+            clicked = true
+            await sleep(1200)
+            if (isPasswordEntryPrompt(await driver.source())) {
+                log('processing', 'Selected Microsoft password sign-in option by text center tap')
                 return true
             }
         }

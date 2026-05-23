@@ -299,7 +299,7 @@ export async function bestEffortBingLogin(
         const passwordEntryVisible = isPasswordEntryPrompt(source)
         const passwordChoiceVisible =
             mentionsAny(source, ['Use your password', 'Use password']) ||
-            (mentionsAny(source, ['Send code']) && !passwordEntryVisible)
+            (mentionsAny(source, ['Send code', 'Get a code to sign in']) && !passwordEntryVisible)
         if (passwordChoiceVisible) {
             if (await choosePasswordLogin(driver, log)) touchedLoginUi = true
             await sleep(1500)
@@ -384,15 +384,25 @@ async function clickMicrosoftSignIn(driver: AppiumDriver): Promise<boolean> {
 async function choosePasswordLogin(driver: AppiumDriver, log: StepLogger): Promise<boolean> {
     const labels = ['Use your password', 'Use password', 'Use your Password', 'Use my password', 'Use your password instead']
     for (let attempt = 0; attempt < 4; attempt += 1) {
-        const clicked = (await driver.clickText(labels)) || (await tapUsePasswordFallback(driver, attempt))
+        let clicked = await driver.clickText(labels)
+        if (clicked) {
+            await sleep(1200)
+            if (isPasswordEntryPrompt(await driver.source())) {
+                log('processing', 'Selected Microsoft password sign-in option by selector')
+                return true
+            }
+        }
+
+        clicked = (await tapUsePasswordFallback(driver, attempt)) || clicked
         if (!clicked) return false
-        await sleep(1200)
-        const source = await driver.source()
-        if (isPasswordEntryPrompt(source)) {
+        await sleep(1400)
+
+        const sourceAfterTap = await driver.source()
+        if (isPasswordEntryPrompt(sourceAfterTap)) {
             log('processing', 'Selected Microsoft password sign-in option')
             return true
         }
-        if (!mentionsAny(source, ['Use your password', 'Use password', 'Send code'])) return true
+        if (!mentionsAny(sourceAfterTap, ['Use your password', 'Use password', 'Send code', 'Get a code to sign in'])) return true
     }
     log('processing', 'Microsoft password sign-in option was visible but did not open password entry')
     return true
@@ -457,6 +467,7 @@ function isMicrosoftLoginPrompt(source: string): boolean {
         'enter password',
         'password',
         'use your password',
+        'get a code to sign in',
         'send code',
         'email',
         'phone',

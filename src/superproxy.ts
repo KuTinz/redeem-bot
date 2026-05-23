@@ -94,12 +94,21 @@ export class SuperProxyManager {
     }
 
     private async dismissStartupPrompts(driver: AppiumDriver): Promise<void> {
-        await driver.clickText(['Không h.lại', 'Không hiện lại', 'Do not show this warning again'])
+        await driver.clickText(['Không h.lại', 'Không h', 'Không hiện lại', 'Do not show this warning again'])
         await sleep(300)
         await driver.clickText(['OK'])
         await sleep(600)
         await driver.clickText(['Cancel', 'Huỷ', 'Hủy'])
         await sleep(300)
+
+        const source = (await driver.source()).toLowerCase()
+        if (!source.includes('gocmod') && !source.includes('warning')) return
+
+        const rect = await driver.windowRect()
+        await driver.tap(rect.x + Math.floor(rect.width * 0.75), rect.y + Math.floor(rect.height * 0.83))
+        await sleep(500)
+        await driver.tap(rect.x + Math.floor(rect.width * 0.72), rect.y + Math.floor(rect.height * 0.94))
+        await sleep(800)
     }
 
     private async hasProxyForm(driver: AppiumDriver): Promise<boolean> {

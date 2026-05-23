@@ -301,7 +301,7 @@ export async function bestEffortBingLogin(
             mentionsAny(source, ['Use your password', 'Use password']) ||
             (mentionsAny(source, ['Send code']) && !passwordEntryVisible)
         if (passwordChoiceVisible) {
-            if ((await clickUsePassword(driver)) || (await tapUsePasswordFallback(driver))) touchedLoginUi = true
+            if (await choosePasswordLogin(driver, log)) touchedLoginUi = true
             await sleep(1500)
             continue
         }
@@ -381,13 +381,28 @@ async function clickMicrosoftSignIn(driver: AppiumDriver): Promise<boolean> {
     return await driver.clickText(['Sign in'])
 }
 
-async function clickUsePassword(driver: AppiumDriver): Promise<boolean> {
-    return await driver.clickExactText(['Use your password', 'Use password', 'Use your Password'])
+async function choosePasswordLogin(driver: AppiumDriver, log: StepLogger): Promise<boolean> {
+    const labels = ['Use your password', 'Use password', 'Use your Password', 'Use my password', 'Use your password instead']
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+        const clicked = (await driver.clickText(labels)) || (await tapUsePasswordFallback(driver, attempt))
+        if (!clicked) return false
+        await sleep(1200)
+        const source = await driver.source()
+        if (isPasswordEntryPrompt(source)) {
+            log('processing', 'Selected Microsoft password sign-in option')
+            return true
+        }
+        if (!mentionsAny(source, ['Use your password', 'Use password', 'Send code'])) return true
+    }
+    log('processing', 'Microsoft password sign-in option was visible but did not open password entry')
+    return true
 }
 
-async function tapUsePasswordFallback(driver: AppiumDriver): Promise<boolean> {
+async function tapUsePasswordFallback(driver: AppiumDriver, attempt: number): Promise<boolean> {
     const rect = await driver.windowRect()
-    await driver.tap(rect.x + Math.floor(rect.width * 0.5), rect.y + Math.floor(rect.height * 0.72))
+    const yRatios = [0.62, 0.68, 0.74, 0.56]
+    const yRatio = yRatios[attempt] ?? 0.68
+    await driver.tap(rect.x + Math.floor(rect.width * 0.5), rect.y + Math.floor(rect.height * yRatio))
     return true
 }
 

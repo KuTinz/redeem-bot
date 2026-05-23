@@ -231,6 +231,14 @@ export class AppiumDriver {
         return await this.find('(//android.widget.EditText)[1]')
     }
 
+    async findEditTextByText(labels: string[]): Promise<string | null> {
+        for (const label of labels) {
+            const exact = await this.find(exactTextXpath(label, 'android.widget.EditText'))
+            if (exact) return exact
+        }
+        return null
+    }
+
     async waitForEditText(timeoutMs: number): Promise<string | null> {
         const start = Date.now()
         while (Date.now() - start < timeoutMs) {
@@ -262,22 +270,37 @@ export async function bestEffortBingLogin(
     password: string,
     totpSecret: string | undefined,
     log: StepLogger,
+    options: { requireRedeemCodeScreen?: boolean } = {},
 ): Promise<boolean> {
     await dismissBingStartup(driver)
 
-    for (let attempt = 0; attempt < 4; attempt += 1) {
+    let touchedLoginUi = false
+    for (let attempt = 0; attempt < 7; attempt += 1) {
         const source = await driver.source()
         if (isRedeemCodeScreen(source)) {
             log('success', 'Bing redeem verification screen is ready')
             return true
         }
         if (!isMicrosoftLoginPrompt(source)) {
+            if (options.requireRedeemCodeScreen) {
+                const fallbackClicked = await tapMicrosoftAuthFallback(driver, attempt)
+                if (fallbackClicked) {
+                    touchedLoginUi = true
+                    await sleep(1800)
+                    continue
+                }
+                log('processing', 'Bing redeem verification screen was not detected after opening link')
+                return false
+            }
             log('success', 'Bing login prompt not visible; reusing existing app session')
             return true
         }
 
-        if (mentionsAny(source, ['Use your password', 'Use password', 'Send code'])) {
-            await clickUsePassword(driver)
+        const passwordChoiceVisible =
+            mentionsAny(source, ['Use your password', 'Use password']) ||
+            (mentionsAny(source, ['Send code']) && !mentionsAny(source, ['Enter password']))
+        if (passwordChoiceVisible) {
+            if ((await clickUsePassword(driver)) || (await tapUsePasswordFallback(driver))) touchedLoginUi = true
             await sleep(1500)
             continue
         }
@@ -288,6 +311,7 @@ export async function bestEffortBingLogin(
                 await driver.clear(passwordField)
                 await driver.type(passwordField, password)
                 await driver.clickExactText(['Sign in', 'Next', 'Continue'])
+                touchedLoginUi = true
                 log('processing', 'Submitted Microsoft account password in Bing app')
                 await sleep(3500)
                 continue
@@ -300,6 +324,7 @@ export async function bestEffortBingLogin(
                 await driver.clear(emailField)
                 await driver.type(emailField, email)
                 await driver.clickExactText(['Next', 'Continue'])
+                touchedLoginUi = true
                 log('processing', 'Submitted Microsoft account email in Bing app')
                 await sleep(2500)
                 continue
@@ -307,6 +332,7 @@ export async function bestEffortBingLogin(
         }
 
         if (await clickMicrosoftSignIn(driver)) {
+            touchedLoginUi = true
             await sleep(1800)
             continue
         }
@@ -329,6 +355,10 @@ export async function bestEffortBingLogin(
     await driver.clickText(['Yes', 'OK', 'Continue', 'Accept'])
     const finalSource = await driver.source()
     if (mentionsAny(finalSource, ['wrong password', 'try again', 'Help us protect', 'Approve sign in request'])) {
+        return false
+    }
+    if (options.requireRedeemCodeScreen && !isRedeemCodeScreen(finalSource)) {
+        log('processing', touchedLoginUi ? 'Bing login flow has not reached the redeem code screen yet' : 'Bing redeem code screen was not detected')
         return false
     }
     log('success', 'Bing login best-effort flow finished')
@@ -354,6 +384,20 @@ async function clickUsePassword(driver: AppiumDriver): Promise<boolean> {
     return await driver.clickExactText(['Use your password', 'Use password', 'Use your Password'])
 }
 
+async function tapUsePasswordFallback(driver: AppiumDriver): Promise<boolean> {
+    const rect = await driver.windowRect()
+    await driver.tap(rect.x + Math.floor(rect.width * 0.5), rect.y + Math.floor(rect.height * 0.72))
+    return true
+}
+
+async function tapMicrosoftAuthFallback(driver: AppiumDriver, attempt: number): Promise<boolean> {
+    if (attempt > 2) return false
+    const rect = await driver.windowRect()
+    const yRatios = [0.72, 0.64, 0.8]
+    await driver.tap(rect.x + Math.floor(rect.width * 0.5), rect.y + Math.floor(rect.height * yRatios[attempt]))
+    return true
+}
+
 export async function enterVerificationCode(driver: AppiumDriver, code: string, log: StepLogger): Promise<boolean> {
     const input = await driver.waitForEditText(10000)
     if (!input) return false
@@ -368,14 +412,14 @@ function elementId(value: Record<string, string> | undefined): string | null {
     return value?.[elementKey] || value?.ELEMENT || null
 }
 
-function textXpath(label: string): string {
+function textXpath(label: string, className = '*'): string {
     const literal = xpathLiteral(label)
-    return `//*[contains(@text, ${literal}) or contains(@content-desc, ${literal})]`
+    return `//${className}[contains(@text, ${literal}) or contains(@content-desc, ${literal})]`
 }
 
-function exactTextXpath(label: string): string {
+function exactTextXpath(label: string, className = '*'): string {
     const literal = xpathLiteral(label)
-    return `//*[@text = ${literal} or @content-desc = ${literal}]`
+    return `//${className}[@text = ${literal} or @content-desc = ${literal}]`
 }
 
 function xpathLiteral(value: string): string {

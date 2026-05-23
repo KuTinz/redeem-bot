@@ -200,13 +200,14 @@ export class SuperProxyManager {
     }
 
     private async fillAuthenticationFields(driver: AppiumDriver, user: string, pass: string): Promise<boolean> {
-        for (let attempt = 0; attempt < 4; attempt += 1) {
-            const source = (await driver.source()).toLowerCase()
-            const fields = await driver.findAll('//android.widget.EditText')
-            const sourceWithoutMethod = source.replace(/username\s*\/\s*password/g, '')
-            const authFieldsVisible = sourceWithoutMethod.includes('username') && sourceWithoutMethod.includes('password')
-            if (authFieldsVisible && fields.length >= 2) {
-                await this.fillFields(driver, fields.slice(-2), [user, pass])
+        for (let attempt = 0; attempt < 5; attempt += 1) {
+            const usernameField = await driver.findEditTextByText(['Username', 'username', 'User', 'user'])
+            const passwordField = await driver.findEditTextByText(['Password', 'password'])
+            if (usernameField && passwordField) {
+                await this.fillField(driver, usernameField, user)
+                const passwordFieldAfterUsername = await driver.findEditTextByText(['Password', 'password'])
+                if (!passwordFieldAfterUsername) return false
+                await this.fillField(driver, passwordFieldAfterUsername, pass)
                 return true
             }
             await this.scrollDown(driver)
@@ -216,12 +217,18 @@ export class SuperProxyManager {
 
     private async fillFields(driver: AppiumDriver, fields: string[], values: string[]): Promise<void> {
         for (let index = 0; index < Math.min(fields.length, values.length); index += 1) {
-            await driver.click(fields[index])
-            await driver.clear(fields[index])
-            if (values[index]) await driver.type(fields[index], values[index])
-            await driver.hideKeyboard()
-            await sleep(250)
+            await this.fillField(driver, fields[index], values[index])
         }
+    }
+
+    private async fillField(driver: AppiumDriver, field: string, value: string): Promise<void> {
+        await driver.click(field)
+        await sleep(150)
+        await driver.clear(field)
+        await sleep(100)
+        if (value) await driver.type(field, value)
+        await driver.hideKeyboard()
+        await sleep(350)
     }
 
     private async saveProxyForm(driver: AppiumDriver): Promise<void> {

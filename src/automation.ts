@@ -119,7 +119,9 @@ export class RedeemAutomation {
                 driver,
                 liveSerial,
                 'Bing redeem sign in',
-                retryDriver => bestEffortBingLogin(retryDriver, payload.email, payload.pass, payload.totpSecret, log),
+                retryDriver => bestEffortBingLogin(retryDriver, payload.email, payload.pass, payload.totpSecret, log, {
+                    requireRedeemCodeScreen: true,
+                }),
                 log,
             )
             driver = verifyLoginResult.driver

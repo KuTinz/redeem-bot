@@ -296,9 +296,10 @@ export async function bestEffortBingLogin(
             return true
         }
 
+        const passwordEntryVisible = isPasswordEntryPrompt(source)
         const passwordChoiceVisible =
             mentionsAny(source, ['Use your password', 'Use password']) ||
-            (mentionsAny(source, ['Send code']) && !mentionsAny(source, ['Enter password']))
+            (mentionsAny(source, ['Send code']) && !passwordEntryVisible)
         if (passwordChoiceVisible) {
             if ((await clickUsePassword(driver)) || (await tapUsePasswordFallback(driver))) touchedLoginUi = true
             await sleep(1500)
@@ -437,13 +438,19 @@ function isMicrosoftLoginPrompt(source: string): boolean {
     return mentionsAny(source, [
         'sign in to verify',
         'sign in',
+        'enter your password',
         'enter password',
+        'password',
         'use your password',
         'send code',
         'email',
         'phone',
         'skype',
     ])
+}
+
+function isPasswordEntryPrompt(source: string): boolean {
+    return mentionsAny(source, ['enter your password', 'enter password', 'password'])
 }
 
 function isRedeemCodeScreen(source: string): boolean {

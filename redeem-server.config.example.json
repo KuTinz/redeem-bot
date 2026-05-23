@@ -15,7 +15,8 @@
       "memory": 2048
     },
     "serialByProfile": {},
-    "bootTimeoutMs": 300000
+    "bootTimeoutMs": 300000,
+    "adbDebugMode": "remote"
   },
   "appium": {
     "url": "http://127.0.0.1:4723",

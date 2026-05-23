@@ -1,4 +1,5 @@
 import path from 'node:path'
+import { readFile, writeFile } from 'node:fs/promises'
 import { fileExists, RedeemServerConfig } from './config.js'
 import { AdbClient } from './adb.js'
 import { CommandError, runCommand, sanitizeProfileName, sleep } from './util.js'
@@ -63,6 +64,7 @@ export class LdPlayerManager {
             await this.modifyNewProfile(profileName, log)
         }
         if (!profile) throw new Error(`LDPlayer did not expose profile ${profileName} after add`)
+        await this.enableAdbDebug(profile, log)
 
         log('processing', `Launching LDPlayer profile ${profileName}`)
         await this.run(['launch', '--name', profileName])
@@ -145,6 +147,43 @@ export class LdPlayerManager {
         ])
     }
 
+    private async enableAdbDebug(profile: LdProfile, log: StepLogger): Promise<void> {
+        const mode = this.config.ldplayer.adbDebugMode
+        if (mode === 'off') return
+
+        const configPath = await this.profileConfigPath(profile.index)
+        if (!configPath) {
+            log(
+                'processing',
+                `LDPlayer config for profile ${profile.name} was not found; enable ADB debugging manually if ADB mapping fails.`,
+            )
+            return
+        }
+
+        const raw = await readFile(configPath, 'utf8')
+        const next = setLdConfigNumber(raw, 'basicSettings.adbDebug', adbDebugValue(mode))
+        if (next === raw) {
+            log('success', `LDPlayer ADB debugging already enabled for ${profile.name}`)
+            return
+        }
+
+        await writeFile(configPath, next, 'utf8')
+        log('success', `Enabled LDPlayer ADB debugging (${mode}) for ${profile.name}`)
+    }
+
+    private async profileConfigPath(index: number): Promise<string | null> {
+        const consolePath = await this.resolveConsolePath()
+        const root = path.dirname(consolePath)
+        const candidates = [
+            path.join(root, 'vms', 'config', `leidian${index}.config`),
+            path.join(root, 'vms', `leidian${index}`, 'config.ini'),
+        ]
+        for (const candidate of candidates) {
+            if (await fileExists(candidate)) return candidate
+        }
+        return null
+    }
+
     private profileNameForEmail(email: string): string {
         const cleanEmail = email.trim()
         if (this.config.ldplayer.profileNameMode === 'email') return cleanEmail
@@ -178,4 +217,20 @@ function commandFailureDetail(error: CommandError): string {
     const { code, stdout, stderr } = error.result
     const output = stderr || stdout || '(no stdout/stderr)'
     return `exit=${code}; output=${output}`
+}
+
+function adbDebugValue(mode: RedeemServerConfig['ldplayer']['adbDebugMode']): number {
+    if (mode === 'remote' || mode === 'local') return 1
+    return 0
+}
+
+function setLdConfigNumber(raw: string, key: string, value: number): string {
+    const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const pattern = new RegExp(`("${escaped}"\\s*:\\s*)\\d+`)
+    if (pattern.test(raw)) return raw.replace(pattern, `$1${value}`)
+
+    const lastBrace = raw.lastIndexOf('}')
+    const line = `${raw.trimEnd().endsWith('{') ? '' : ','}\n    "${key}": ${value}\n`
+    if (lastBrace >= 0) return `${raw.slice(0, lastBrace).trimEnd()}${line}${raw.slice(lastBrace)}`
+    return `${raw.trimEnd()}\n"${key}": ${value}\n`
 }

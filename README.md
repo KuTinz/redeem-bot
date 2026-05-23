@@ -49,6 +49,9 @@ auto-detected LDPlayer install path is wrong. New profiles default to the exact
 email as the LDPlayer name, with `540x960`, `2` CPU cores, and `2048` MB RAM.
 If more than one emulator is online and auto mapping cannot identify a profile,
 put its serial in `ldplayer.serialByProfile`.
+New profiles also patch the LDPlayer per-instance config so ADB debugging is
+enabled before first launch. Set `ldplayer.adbDebugMode` to `off` only if you
+want to manage that LDPlayer setting manually.
 
 Set `proxyApp` to `superproxy` and put Super Proxy at `apks/superproxy.apk` to
 use Super Proxy for HTTP/SOCKS routing. Leave `proxyApp` as `v2rayng` to use

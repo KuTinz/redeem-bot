@@ -21,6 +21,7 @@ export interface RedeemServerConfig {
         }
         serialByProfile: Record<string, string>
         bootTimeoutMs: number
+        adbDebugMode: 'off' | 'local' | 'remote'
     }
     appium: {
         url: string
@@ -79,6 +80,7 @@ function defaultConfig(rootDir: string): RedeemServerConfig {
             },
             serialByProfile: {},
             bootTimeoutMs: 300000,
+            adbDebugMode: 'remote',
         },
         appium: {
             url: 'http://127.0.0.1:4723',

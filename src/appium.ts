@@ -97,6 +97,18 @@ export class AppiumDriver {
         }
     }
 
+    async findByAndroidUiAutomator(selector: string): Promise<string | null> {
+        try {
+            const response = await this.request<AppiumElementResponse>(`/session/${this.sessionId}/element`, {
+                method: 'POST',
+                body: { using: '-android uiautomator', value: selector },
+            })
+            return elementId(response.body.value)
+        } catch {
+            return null
+        }
+    }
+
     async findAll(xpath: string): Promise<string[]> {
         try {
             const response = await this.request<AppiumElementsResponse>(`/session/${this.sessionId}/elements`, {
@@ -225,6 +237,17 @@ export class AppiumDriver {
         return false
     }
 
+    async clickAndroidText(labels: string[]): Promise<boolean> {
+        for (const label of labels) {
+            const escaped = label.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+            const id = await this.findByAndroidUiAutomator(`new UiSelector().textContains("${escaped}")`)
+            if (!id) continue
+            await this.click(id)
+            return true
+        }
+        return false
+    }
+
     async clickExactText(labels: string[]): Promise<boolean> {
         for (const label of labels) {
             const id = await this.find(exactTextXpath(label))
@@ -313,7 +336,7 @@ export async function bestEffortBingLogin(
         }
         if (!isMicrosoftLoginPrompt(source)) {
             if (options.requireRedeemCodeScreen) {
-                const fallbackClicked = await tapMicrosoftAuthFallback(driver, attempt)
+                const fallbackClicked = (await choosePasswordLogin(driver, log, attempt)) || (await tapMicrosoftAuthFallback(driver, attempt))
                 if (fallbackClicked) {
                     touchedLoginUi = true
                     await sleep(1800)
@@ -411,10 +434,11 @@ async function clickMicrosoftSignIn(driver: AppiumDriver): Promise<boolean> {
     return await driver.clickText(['Sign in'])
 }
 
-async function choosePasswordLogin(driver: AppiumDriver, log: StepLogger): Promise<boolean> {
+async function choosePasswordLogin(driver: AppiumDriver, log: StepLogger, coordinateAttempt?: number): Promise<boolean> {
     const labels = ['Use your password', 'Use password', 'Use your Password', 'Use my password', 'Use your password instead']
-    for (let attempt = 0; attempt < 4; attempt += 1) {
-        let clicked = await driver.clickText(labels)
+    const attempts = coordinateAttempt === undefined ? [0, 1, 2, 3, 4, 5] : [coordinateAttempt % 6]
+    for (const attempt of attempts) {
+        let clicked = (await driver.clickText(labels)) || (await driver.clickAndroidText(labels))
         if (clicked) {
             await sleep(1200)
             if (isPasswordEntryPrompt(await driver.source())) {
@@ -450,7 +474,7 @@ async function choosePasswordLogin(driver: AppiumDriver, log: StepLogger): Promi
 
 async function tapUsePasswordFallback(driver: AppiumDriver, attempt: number): Promise<boolean> {
     const rect = await driver.windowRect()
-    const yRatios = [0.62, 0.68, 0.74, 0.56]
+    const yRatios = [0.64, 0.68, 0.61, 0.70, 0.57, 0.74]
     const yRatio = yRatios[attempt] ?? 0.68
     await driver.tap(rect.x + Math.floor(rect.width * 0.5), rect.y + Math.floor(rect.height * yRatio))
     return true

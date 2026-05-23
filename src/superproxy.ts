@@ -222,13 +222,42 @@ export class SuperProxyManager {
         if (usernameField && passwordField) return { username: usernameField, password: passwordField }
 
         const source = (await driver.source()).toLowerCase()
+        const indexedFields = await this.findAuthenticationFieldsBySource(driver, source)
+        if (indexedFields) return indexedFields
+
         const sourceWithoutMethod = source.replace(/username\s*\/\s*password/g, '')
         const authFieldsVisible = sourceWithoutMethod.includes('username') && sourceWithoutMethod.includes('password')
         if (!authFieldsVisible) return null
 
         const fields = await driver.findAll('//android.widget.EditText')
-        if (fields.length < 2 || sourceWithoutMethod.includes('port')) return null
+        if (fields.length < 2) return null
         const [username, password] = fields.slice(-2)
+        return { username, password }
+    }
+
+    private async findAuthenticationFieldsBySource(
+        driver: AppiumDriver,
+        source: string,
+    ): Promise<{ username: string; password: string } | null> {
+        const editTextTags = Array.from(source.matchAll(/<[^>]*class="android\.widget\.edittext"[^>]*>/g))
+        let usernameIndex = -1
+        let passwordIndex = -1
+        for (let index = 0; index < editTextTags.length; index += 1) {
+            const searchable = ['text', 'hint', 'content-desc', 'resource-id']
+                .map(attribute => xmlAttr(editTextTags[index][0], attribute))
+                .join(' ')
+            const normalized = searchable.replace(/username\s*\/\s*password/g, '')
+            if (usernameIndex < 0 && (normalized.includes('username') || /\buser\b/.test(normalized))) {
+                usernameIndex = index + 1
+            }
+            if (passwordIndex < 0 && normalized.includes('password')) {
+                passwordIndex = index + 1
+            }
+        }
+        if (usernameIndex < 1 || passwordIndex < 1) return null
+        const username = await driver.find(`(//android.widget.EditText)[${usernameIndex}]`)
+        const password = await driver.find(`(//android.widget.EditText)[${passwordIndex}]`)
+        if (!username || !password) return null
         return { username, password }
     }
 
@@ -310,4 +339,9 @@ function proxyProtocol(proxy: ProxyPayload): ProxyProtocol {
         .startsWith('socks')
         ? 'SOCKS5'
         : 'HTTP'
+}
+
+function xmlAttr(tag: string, name: string): string {
+    const match = tag.match(new RegExp(`${name}="([^"]*)"`, 'i'))
+    return match?.[1] || ''
 }

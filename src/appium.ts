@@ -414,12 +414,12 @@ function elementId(value: Record<string, string> | undefined): string | null {
 
 function textXpath(label: string, className = '*'): string {
     const literal = xpathLiteral(label)
-    return `//${className}[contains(@text, ${literal}) or contains(@content-desc, ${literal})]`
+    return `//${className}[contains(@text, ${literal}) or contains(@hint, ${literal}) or contains(@content-desc, ${literal}) or contains(@resource-id, ${literal})]`
 }
 
 function exactTextXpath(label: string, className = '*'): string {
     const literal = xpathLiteral(label)
-    return `//${className}[@text = ${literal} or @content-desc = ${literal}]`
+    return `//${className}[@text = ${literal} or @hint = ${literal} or @content-desc = ${literal} or @resource-id = ${literal}]`
 }
 
 function xpathLiteral(value: string): string {

@@ -88,6 +88,7 @@ export class SuperProxyManager {
             return false
         }
         await sleep(1000)
+        await this.acceptWarningIfPresent(driver)
 
         await this.selectProtocol(driver, protocol)
         return await this.hasProxyForm(driver)
@@ -114,7 +115,12 @@ export class SuperProxyManager {
 
     private async acceptWarningIfPresent(driver: AppiumDriver): Promise<void> {
         const source = (await driver.source()).toLowerCase()
-        if (!source.includes('warning') && !source.includes('do not use this app')) return
+        const warningVisible =
+            source.includes('warning') ||
+            source.includes('do not use this app') ||
+            source.includes('superproxy is an app') ||
+            source.includes('proxy server')
+        if (!warningVisible) return
 
         await driver.clickText(['Do not show this warning again'])
         await sleep(6000)

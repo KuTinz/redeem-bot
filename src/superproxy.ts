@@ -194,6 +194,8 @@ export class SuperProxyManager {
         await this.fillFields(driver, fields.slice(0, 3), [values.name, values.host, values.port])
         if (values.user || values.pass) {
             if (!(await this.selectAuthentication(driver, true))) return false
+            await sleep(900)
+            await this.scrollDown(driver)
             if (!(await this.fillAuthenticationFields(driver, values.user, values.pass))) return false
         }
         return true
@@ -225,7 +227,7 @@ export class SuperProxyManager {
         if (!authFieldsVisible) return null
 
         const fields = await driver.findAll('//android.widget.EditText')
-        if (fields.length < 2) return null
+        if (fields.length < 2 || sourceWithoutMethod.includes('port')) return null
         const [username, password] = fields.slice(-2)
         return { username, password }
     }

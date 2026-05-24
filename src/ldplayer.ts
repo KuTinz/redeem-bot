@@ -53,21 +53,21 @@ export class LdPlayerManager {
     async ensureProfile(email: string, adb: AdbClient, log: StepLogger): Promise<LdInstance> {
         const profileName = this.profileNameForEmail(email)
         let profiles = await this.listProfiles()
-        let profile = profiles.find(item => item.name === profileName)
+        let profile = this.selectProfile(profiles, profileName, log)
         let created = false
         if (!profile) {
             log('processing', `Creating LDPlayer profile ${profileName}`)
             await this.createProfile(profileName, profiles, log)
             profiles = await this.listProfiles()
-            profile = profiles.find(item => item.name === profileName)
+            profile = this.selectProfile(profiles, profileName, log)
             created = true
             await this.modifyNewProfile(profileName, log)
         }
         if (!profile) throw new Error(`LDPlayer did not expose profile ${profileName} after add`)
         await this.enableAdbDebug(profile, log)
 
-        log('processing', `Launching LDPlayer profile ${profileName}`)
-        await this.run(['launch', '--name', profileName])
+        log('processing', `Launching LDPlayer profile ${profileName} (index ${profile.index})`)
+        await this.run(['launch', '--index', String(profile.index)])
         const serial = await this.waitForSerial(profile, adb)
         await adb.waitForBoot(serial, this.config.ldplayer.bootTimeoutMs, log)
         return {
@@ -94,10 +94,10 @@ export class LdPlayerManager {
 
     async quitProfile(instance: Pick<LdInstance, 'profileName' | 'index'>): Promise<void> {
         try {
-            await this.run(['quit', '--name', instance.profileName])
+            await this.run(['quit', '--index', String(instance.index)])
             return
         } catch {
-            await this.run(['quit', '--index', String(instance.index)])
+            await this.run(['quit', '--name', instance.profileName])
         }
     }
 
@@ -129,12 +129,39 @@ export class LdPlayerManager {
             return
         } catch (error) {
             const message = error instanceof CommandError ? commandFailureDetail(error) : String(error)
+            const created = await this.profileCreatedDespiteExitCode(profileName, 'add', log)
+            if (created) return
             log('processing', `LDPlayer add failed; trying copy fallback from index 0. ${message}`)
         }
 
         const source = existingProfiles.find(profile => profile.index === 0) || existingProfiles[0]
         if (!source) throw new Error('LDPlayer add failed and no existing instance is available for copy fallback')
-        await this.run(['copy', '--name', profileName, '--from', String(source.index)])
+        try {
+            await this.run(['copy', '--name', profileName, '--from', String(source.index)])
+        } catch (error) {
+            const created = await this.profileCreatedDespiteExitCode(profileName, 'copy', log)
+            if (created) return
+            throw error
+        }
+    }
+
+    private selectProfile(profiles: LdProfile[], profileName: string, log: StepLogger): LdProfile | undefined {
+        const matches = profiles.filter(item => item.name === profileName)
+        const profile = matches[0]
+        if (profile && matches.length > 1) {
+            log(
+                'processing',
+                `Multiple LDPlayer profiles named ${profileName} were found; using index ${profile.index}. Remove duplicates later to avoid confusion.`,
+            )
+        }
+        return profile
+    }
+
+    private async profileCreatedDespiteExitCode(profileName: string, action: 'add' | 'copy', log: StepLogger): Promise<boolean> {
+        const profile = (await this.listProfiles()).find(item => item.name === profileName)
+        if (!profile) return false
+        log('success', `LDPlayer ${action} returned a non-zero exit code, but profile ${profileName} exists at index ${profile.index}`)
+        return true
     }
 
     private async modifyNewProfile(profileName: string, log: StepLogger): Promise<void> {

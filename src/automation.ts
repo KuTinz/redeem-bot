@@ -214,6 +214,11 @@ export class RedeemAutomation {
 
         const retryDriver = await this.appium.createAndroidSession(serial)
         log('success', 'Appium UiAutomator2 session recreated')
+        if (this.config.proxyApp === 'superproxy') {
+            const recovered = await new SuperProxyManager(this.config, adb).recoverConnectedProxy(serial, retryDriver, log)
+            if (recovered) return retryDriver
+            log('processing', 'Super Proxy state was not recoverable after Appium crash; retrying full proxy setup')
+        }
         await this.proxyManager(adb).prepareProxy(serial, profileName, proxy, retryDriver, log)
         return retryDriver
     }

@@ -46,6 +46,23 @@ export class SuperProxyManager {
         log('success', 'Super Proxy connect action sent')
     }
 
+    async recoverConnectedProxy(serial: string, driver: AppiumDriver, log: StepLogger): Promise<boolean> {
+        await this.adb.startPackage(serial, this.config.packages.superProxy)
+        await sleep(2000)
+        await this.dismissStartupPrompts(driver)
+        await this.acceptVpnPrompt(driver)
+        if (await this.isStarted(driver)) {
+            log('success', 'Super Proxy is already connected after Appium session recovery')
+            return true
+        }
+
+        const started = await this.tryStart(driver, log)
+        if (!started) return false
+        await this.acceptVpnPrompt(driver)
+        log('success', 'Super Proxy connect action sent')
+        return true
+    }
+
     private async tryAddProxy(
         profileName: string,
         proxy: ProxyPayload,

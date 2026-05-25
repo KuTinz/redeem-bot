@@ -106,13 +106,13 @@ export class LdPlayerManager {
         if (configured) return configured
 
         const emulatorSerial = `emulator-${5554 + profile.index * 2}`
-        const connectPort = 5555 + profile.index * 2
+        const tcpSerial = this.tcpSerialForIndex(profile.index)
         const start = Date.now()
         while (Date.now() - start < this.config.ldplayer.bootTimeoutMs) {
-            await adb.connect(`127.0.0.1:${connectPort}`)
+            await adb.connect(tcpSerial)
             const devices = await adb.devices()
+            if (devices.includes(tcpSerial)) return tcpSerial
             if (devices.includes(emulatorSerial)) return emulatorSerial
-            if (devices.includes(`127.0.0.1:${connectPort}`)) return `127.0.0.1:${connectPort}`
             if (devices.length === 1) return devices[0]
             await sleep(2000)
         }
@@ -121,6 +121,10 @@ export class LdPlayerManager {
             `Could not map LDPlayer profile ${profile.name} to ADB. Devices: ${devices.join(', ') || '(none)'}. ` +
                 `Enable LDPlayer ADB/local connection, or configure ldplayer.serialByProfile for this profile.`,
         )
+    }
+
+    private tcpSerialForIndex(index: number): string {
+        return `127.0.0.1:${5555 + index * 2}`
     }
 
     private async createProfile(profileName: string, existingProfiles: LdProfile[], log: StepLogger): Promise<void> {

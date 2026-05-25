@@ -158,21 +158,50 @@ export class AdbClient {
 
     async resolveLiveSerial(serial: string): Promise<string> {
         const devices = await this.devices()
+        const liveSerial = this.matchLiveSerial(serial, devices)
+        if (liveSerial) return liveSerial
+
+        const reconnected = await this.reconnectSerial(serial)
+        if (reconnected) return reconnected
+
+        const finalDevices = await this.devices()
+        if (finalDevices.length === 1) return finalDevices[0]
+        throw new Error(
+            `ADB device ${serial} not found after reconnect attempts. Online devices: ${finalDevices.join(', ') || '(none)'}`,
+        )
+    }
+
+    private matchLiveSerial(serial: string, devices: string[]): string | null {
         if (devices.includes(serial)) return serial
+        for (const candidate of this.connectCandidates(serial)) {
+            if (devices.includes(candidate)) return candidate
+        }
+        return null
+    }
+
+    private async reconnectSerial(serial: string): Promise<string | null> {
+        const candidates = this.connectCandidates(serial)
+        if (!candidates.length) return null
+
+        for (let attempt = 1; attempt <= 5; attempt += 1) {
+            for (const candidate of candidates) {
+                await this.connect(candidate)
+            }
+            await sleep(500 * attempt)
+            const devices = await this.devices()
+            const liveSerial = this.matchLiveSerial(serial, devices)
+            if (liveSerial) return liveSerial
+            if (devices.length === 1) return devices[0]
+        }
+        return null
+    }
+
+    private connectCandidates(serial: string): string[] {
+        if (/^127\.0\.0\.1:\d+$/.test(serial)) return [serial]
         const hostPort = serial.match(/^emulator-(\d+)$/)
-        if (hostPort) {
-            const port = Number.parseInt(hostPort[1], 10) + 1
-            const loopback = `127.0.0.1:${port}`
-            if (devices.includes(loopback)) return loopback
-            await this.connect(loopback)
-            if ((await this.devices()).includes(loopback)) return loopback
-        }
-        if (/^127\.0\.0\.1:\d+$/.test(serial)) {
-            await this.connect(serial)
-            if ((await this.devices()).includes(serial)) return serial
-        }
-        if (devices.length === 1) return devices[0]
-        throw new Error(`ADB device ${serial} not found. Online devices: ${devices.join(', ') || '(none)'}`)
+        if (!hostPort) return []
+        const port = Number.parseInt(hostPort[1], 10) + 1
+        return [`127.0.0.1:${port}`]
     }
 }
 

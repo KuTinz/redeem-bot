@@ -38,6 +38,16 @@ export class AppiumClient {
     }
 
     async createAndroidSession(serial: string): Promise<AppiumDriver> {
+        try {
+            return await this.createAndroidSessionForSerial(serial)
+        } catch (error) {
+            const fallbackSerial = alternateAdbSerial(serial)
+            if (!fallbackSerial || !isAppiumDeviceListMismatch(error)) throw error
+            return await this.createAndroidSessionForSerial(fallbackSerial)
+        }
+    }
+
+    private async createAndroidSessionForSerial(serial: string): Promise<AppiumDriver> {
         const response = await jsonRequest<{
             sessionId?: string
             value?: { sessionId?: string }
@@ -638,4 +648,29 @@ function isBingRewardsWelcome(source: string): boolean {
 
 function hasPasswordEditText(source: string): boolean {
     return /<android\.widget\.EditText\b[^>]*\bpassword="true"/i.test(source) || /class="android\.widget\.EditText"[^>]*\bpassword="true"/i.test(source) || /password="true"[^>]*class="android\.widget\.EditText"/i.test(source)
+}
+
+function alternateAdbSerial(serial: string): string | null {
+    const tcpMatch = serial.match(/^127\.0\.0\.1:(\d+)$/)
+    if (tcpMatch) {
+        const tcpPort = Number.parseInt(tcpMatch[1], 10)
+        if (Number.isFinite(tcpPort) && tcpPort > 1) return `emulator-${tcpPort - 1}`
+    }
+
+    const emulatorMatch = serial.match(/^emulator-(\d+)$/)
+    if (emulatorMatch) {
+        const emulatorPort = Number.parseInt(emulatorMatch[1], 10)
+        if (Number.isFinite(emulatorPort)) return `127.0.0.1:${emulatorPort + 1}`
+    }
+
+    return null
+}
+
+function isAppiumDeviceListMismatch(error: unknown): boolean {
+    const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase()
+    return (
+        message.includes('was not in the list of connected devices') ||
+        message.includes('could not find a connected android device') ||
+        message.includes('no connected devices')
+    )
 }

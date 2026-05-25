@@ -334,6 +334,13 @@ export async function bestEffortBingLogin(
             log('success', 'Bing redeem verification screen is ready')
             return true
         }
+        if (isBingRewardsWelcome(source)) {
+            log('processing', 'Bing Rewards welcome screen detected; refreshing page before redeem verification')
+            await refreshBingPage(driver)
+            touchedLoginUi = true
+            await sleep(3500)
+            continue
+        }
         if (!isMicrosoftLoginPrompt(source)) {
             if (options.requireRedeemCodeScreen) {
                 const fallbackClicked = (await choosePasswordLogin(driver, log, attempt)) || (await tapMicrosoftAuthFallback(driver, attempt))
@@ -425,6 +432,16 @@ async function dismissBingStartup(driver: AppiumDriver): Promise<void> {
         if (!clicked) break
         await sleep(1000)
     }
+}
+
+async function refreshBingPage(driver: AppiumDriver): Promise<void> {
+    const clicked =
+        (await driver.clickContentDescription(['Refresh', 'refresh', 'Reload', 'reload'])) ||
+        (await driver.clickText(['Refresh', 'refresh', 'Reload', 'reload']))
+    if (clicked) return
+
+    const rect = await driver.windowRect()
+    await driver.tap(rect.x + Math.floor(rect.width * 0.79), rect.y + Math.floor(rect.height * 0.09))
 }
 
 async function clickMicrosoftSignIn(driver: AppiumDriver): Promise<boolean> {
@@ -608,6 +625,14 @@ function isRedeemCodeScreen(source: string): boolean {
     return (
         mentionsUiAny(source, ['six digit', 'six-digit', '6 digit', '6-digit']) ||
         (mentionsUiAny(source, ['verification code', 'security code']) && !isMicrosoftLoginPrompt(source))
+    )
+}
+
+function isBingRewardsWelcome(source: string): boolean {
+    return (
+        mentionsUiAny(source, ['Hi, Welcome to Microsoft Rewards', 'Access now']) ||
+        (mentionsUiAny(source, ['Search or finish tasks', 'Earn Rewards points', 'Redeem for Rewards']) &&
+            mentionsUiAny(source, ['Microsoft Rewards']))
     )
 }
 

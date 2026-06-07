@@ -527,9 +527,31 @@ export async function enterVerificationCode(driver: AppiumDriver, code: string, 
         await driver.clear(inputs[0])
         await driver.type(inputs[0], code)
     }
-    await driver.clickText(['Verify', 'Next', 'Continue', 'Submit'])
+    await driver.hideKeyboard()
+    const clicked = await driver.clickText(['Verify', 'Next', 'Continue', 'Submit'])
+    if (!clicked) log('processing', 'Verify button was not detected after code entry; watching for Bing result anyway')
     log('success', 'Submitted six character Bing verification code')
     return true
+}
+
+export async function waitForBingVerificationSuccess(
+    driver: AppiumDriver,
+    timeoutMs: number,
+    log: StepLogger,
+): Promise<boolean> {
+    const timeoutSeconds = Math.ceil(timeoutMs / 1000)
+    log('processing', `Waiting up to ${timeoutSeconds}s for Bing verification success message`)
+    const start = Date.now()
+    while (Date.now() - start < timeoutMs) {
+        const source = await driver.source()
+        if (isBingVerificationSuccessful(source)) {
+            log('success', 'Bing verification success message detected')
+            return true
+        }
+        await sleep(1000)
+    }
+    log('processing', `Bing verification success message was not detected within ${timeoutSeconds}s`)
+    return false
 }
 
 function elementId(value: Record<string, string> | undefined): string | null {
@@ -636,6 +658,19 @@ function isRedeemCodeScreen(source: string): boolean {
         mentionsUiAny(source, ['six digit', 'six-digit', '6 digit', '6-digit']) ||
         (mentionsUiAny(source, ['verification code', 'security code']) && !isMicrosoftLoginPrompt(source))
     )
+}
+
+function isBingVerificationSuccessful(source: string): boolean {
+    return mentionsUiAny(source, [
+        'successful',
+        'successfully',
+        'verification complete',
+        'verification completed',
+        'verified successfully',
+        "you're all set",
+        'you\u2019re all set',
+        'all set',
+    ])
 }
 
 function isBingRewardsWelcome(source: string): boolean {

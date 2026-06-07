@@ -1,5 +1,11 @@
 import { AdbClient } from './adb.js'
-import { AppiumClient, AppiumDriver, bestEffortBingLogin, enterVerificationCode } from './appium.js'
+import {
+    AppiumClient,
+    AppiumDriver,
+    bestEffortBingLogin,
+    enterVerificationCode,
+    waitForBingVerificationSuccess,
+} from './appium.js'
 import { CaptchaSolver } from './captcha.js'
 import { RedeemServerConfig } from './config.js'
 import { LdPlayerManager, type LdInstance } from './ldplayer.js'
@@ -8,6 +14,8 @@ import { TaskStore } from './tasks.js'
 import { RedeemPayload, StepLogger, TaskRecord } from './types.js'
 import { asErrorMessage, sleep } from './util.js'
 import { V2rayNgManager } from './v2rayng.js'
+
+const VERIFY_SUCCESS_TIMEOUT_MS = 30000
 
 export class RedeemAutomation {
     private readonly config: RedeemServerConfig
@@ -184,8 +192,25 @@ export class RedeemAutomation {
                 return
             }
 
-            await sleep(2500)
-            this.store.status(task, 'done', 'Redeem verification code submitted to Bing app', 'done')
+            const successWaitResult = await this.withAppiumRetry(
+                driver,
+                liveSerial,
+                'Bing verification success wait',
+                retryDriver => waitForBingVerificationSuccess(retryDriver, VERIFY_SUCCESS_TIMEOUT_MS, log),
+                log,
+            )
+            driver = successWaitResult.driver
+
+            if (successWaitResult.value) {
+                this.store.status(task, 'done', 'Bing verification successful; closing LDPlayer profile', 'done')
+            } else {
+                this.store.status(
+                    task,
+                    'done',
+                    'Bing success message was not detected within 30 seconds after submit; closing LDPlayer profile',
+                    'done',
+                )
+            }
         } finally {
             await driver?.close().catch(() => undefined)
             if (instance && task.status === 'done') {
